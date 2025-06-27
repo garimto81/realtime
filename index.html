@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 포커스 모니터 (동적 기준 버전)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #111827; color: #f3f4f6; }
+        .camera-card { background-color: #1f2937; border: 2px solid #374151; transition: border-color 0.3s ease-in-out; }
+        .camera-card.alert { border-color: #ef4444; animation: pulse-red 1s infinite; }
+        @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } }
+        .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="container mx-auto max-w-7xl p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">실시간 포커스 모니터</h1>
+            <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
+                <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span id="status-text">얼굴 인식 모델을 로딩 중입니다...</span>
+            </p>
+        </header>
+
+        <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 flex flex-col md:flex-row items-center justify-center gap-6">
+            <!-- UI 변경: '흐림 기준값' -> '민감도' -->
+            <div class="flex items-center gap-3">
+                <label for="sensitivity-slider" class="text-lg font-medium">민감도:</label>
+                <input type="range" id="sensitivity-slider" min="50" max="95" value="75" class="w-48 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                <span id="sensitivity-value" class="font-bold text-2xl text-blue-400 w-16 text-center">75%</span>
+            </div>
+            <button id="open-camera-select-button" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>모니터링 시작</button>
+             <div class="flex items-center">
+                <input id="debug-mode-checkbox" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                <label for="debug-mode-checkbox" class="ml-2 block text-sm text-gray-300">디버그 모드 활성화</label>
+            </div>
+        </div>
+        
+        <div id="camera-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+        <div id="debug-panel" class="mt-8 bg-gray-900 text-gray-400 font-mono text-xs p-4 rounded-lg hidden">
+            <h3 class="text-white font-bold text-lg mb-2">데이터 분석 로그 (첫 번째 카메라)</h3>
+            <pre id="debug-content" class="whitespace-pre-wrap break-all">디버그 모드를 켜고 분석을 시작하세요.</pre>
+        </div>
+    </div>
+    
+    <div id="camera-select-modal" class="fixed inset-0 z-50 items-center justify-center hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-75"></div>
+        <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg m-4">
+            <h3 class="text-lg font-bold mb-4 text-white">모니터링할 카메라 선택</h3>
+            <div id="camera-list" class="space-y-2 max-h-64 overflow-y-auto pr-2 mb-6"></div>
+            <div class="flex justify-end gap-4">
+                <button id="modal-cancel-button" class="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500">취소</button>
+                <button id="modal-start-button" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">선택 완료</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const openCameraSelectButton = document.getElementById('open-camera-select-button');
+        const statusContainer = document.getElementById('status-container');
+        const statusText = document.getElementById('status-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const cameraGrid = document.getElementById('camera-grid');
+        const sensitivitySlider = document.getElementById('sensitivity-slider');
+        const sensitivityValueEl = document.getElementById('sensitivity-value');
+        const cameraSelectModal = document.getElementById('camera-select-modal');
+        const cameraListContainer = document.getElementById('camera-list');
+        const modalCancelButton = document.getElementById('modal-cancel-button');
+        const modalStartButton = document.getElementById('modal-start-button');
+        const debugModeCheckbox = document.getElementById('debug-mode-checkbox');
+        const debugPanel = document.getElementById('debug-panel');
+        const debugContent = document.getElementById('debug-content');
+
+        // --- Constants ---
+        const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+        const BLUR_ALERT_THRESHOLD_FRAMES = 3;
+        const ALERT_SOUND_NOTE = "C5";
+        const ALERT_SOUND_DURATION = "8n";
+        const MOVING_AVERAGE_WINDOW = 50; // 이동 평균 계산을 위한 최근 점수 개수
+        const WARMUP_FRAMES = 30; // 안정적인 평균 계산을 위한 초기 프레임 수
+
+        // --- State Variables ---
+        let modelsLoaded = false;
+        const analysisLoops = new Map();
+        let audioContextStarted = false;
+        let activeStreams = [];
+        const cameraAnalysisData = new Map(); // 각 카메라의 분석 데이터(점수 기록, 평균) 저장
+        
+        // --- Audio Setup ---
+        const synth = new Tone.Synth().toDestination();
+        function playAlertSound() {
+            if (!audioContextStarted) { Tone.start(); audioContextStarted = true; }
+            synth.triggerAttackRelease(ALERT_SOUND_NOTE, ALERT_SOUND_DURATION);
+        }
+
+        function normalizeBox(box) {
+            if (!box) return null;
+            return {
+                x: box._x ?? box.x,
+                y: box._y ?? box.y,
+                width: box._width ?? box.width,
+                height: box._height ?? box.height
+            };
+        }
+
+        function calculateFocusScore(imageData) {
+            const { width, height, data } = imageData;
+            if (width === 0 || height === 0) return 0;
+            const gray = new Uint8Array(width * height);
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                gray[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+            const laplacianValues = [];
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const i = y * width + x;
+                    const laplacian = gray[i - width] + gray[i + width] + gray[i - 1] + gray[i + 1] - 4 * gray[i];
+                    laplacianValues.push(laplacian);
+                }
+            }
+            if (laplacianValues.length === 0) return 0;
+            const mean = laplacianValues.reduce((acc, val) => acc + val, 0) / laplacianValues.length;
+            const variance = laplacianValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / laplacianValues.length;
+            return variance;
+        }
+        
+        function getCentermostFace(detections, videoWidth, videoHeight) {
+            if (!detections || detections.length === 0) return null;
+            if (detections.length === 1) return detections[0];
+            
+            const frameCenterX = videoWidth / 2;
+            const frameCenterY = videoHeight / 2;
+            let centermostFace = null;
+            let minDistance = Infinity;
+
+            for (const detection of detections) {
+                const box = normalizeBox(detection.box);
+                if (!box) continue;
+                const faceCenterX = box.x + box.width / 2;
+                const faceCenterY = box.y + box.height / 2;
+                const distance = Math.sqrt(Math.pow(frameCenterX - faceCenterX, 2) + Math.pow(frameCenterY - faceCenterY, 2));
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    centermostFace = detection;
+                }
+            }
+            return centermostFace;
+        }
+        
+        async function startAnalysisLoop(videoElement, processCanvas, overlayCanvas, scoreElement, deviceId, isPrimaryDebugTarget) {
+            const processCtx = processCanvas.getContext('2d', { willReadFrequently: true });
+            let alertState = { active: false, consecutiveBlurFrames: 0 };
+            const analysisData = cameraAnalysisData.get(deviceId);
+
+            async function loop() {
+                try {
+                    if (!videoElement.srcObject || !videoElement.srcObject.active || videoElement.paused || videoElement.videoWidth === 0) {
+                        cancelAnimationFrame(analysisLoops.get(deviceId));
+                        analysisLoops.delete(deviceId);
+                        return;
+                    }
+                    
+                    const detections = await faceapi.detectAllFaces(videoElement, new faceapi.TinyFaceDetectorOptions());
+                    
+                    const overlayCtx = overlayCanvas.getContext('2d');
+                    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                    
+                    if (detections.length > 0) {
+                        const mainFaceForAnalysis = getCentermostFace(detections, videoElement.videoWidth, videoElement.videoHeight);
+                        if (!mainFaceForAnalysis) {
+                            analysisLoops.set(deviceId, requestAnimationFrame(loop));
+                            return;
+                        }
+
+                        const mainFaceIndex = detections.findIndex(d => d === mainFaceForAnalysis);
+                        const mainFaceRawBox = normalizeBox(mainFaceForAnalysis.box);
+                        processCtx.drawImage(videoElement, 0, 0, processCanvas.width, processCanvas.height);
+                        
+                        const clampedX = Math.max(0, mainFaceRawBox.x);
+                        const clampedY = Math.max(0, mainFaceRawBox.y);
+                        const clampedWidth = Math.min(processCanvas.width - clampedX, mainFaceRawBox.width);
+                        const clampedHeight = Math.min(processCanvas.height - clampedY, mainFaceRawBox.height);
+                        const faceImageData = processCtx.getImageData(clampedX, clampedY, clampedWidth, clampedHeight);
+
+                        const score = calculateFocusScore(faceImageData);
+                        
+                        // --- 새로운 로직: 이동 평균 및 동적 기준 계산 ---
+                        analysisData.scores.push(score);
+                        if (analysisData.scores.length > MOVING_AVERAGE_WINDOW) {
+                            analysisData.scores.shift(); // 오래된 점수 제거
+                        }
+
+                        let isBlurry = false;
+                        // 데이터가 충분히 쌓이면 평균 계산 및 흐림 판단 시작
+                        if (analysisData.scores.length > WARMUP_FRAMES) {
+                            const sum = analysisData.scores.reduce((acc, val) => acc + val, 0);
+                            analysisData.average = sum / analysisData.scores.length;
+
+                            const sensitivity = parseFloat(sensitivitySlider.value) / 100;
+                            const dynamicThreshold = analysisData.average * sensitivity;
+                            isBlurry = score < dynamicThreshold;
+                            
+                            // 점수판에 현재 점수와 평균 점수 함께 표시
+                            scoreElement.textContent = `${score.toFixed(1)} / ${analysisData.average.toFixed(1)}`;
+                        } else {
+                            scoreElement.textContent = score.toFixed(1); // 초기화 중에는 현재 점수만 표시
+                        }
+
+                        if (isBlurry) {
+                            scoreElement.classList.add('text-red-500');
+                            alertState.consecutiveBlurFrames++;
+                        } else {
+                            scoreElement.classList.remove('text-red-500');
+                            alertState.consecutiveBlurFrames = 0;
+                            if(alertState.active) { videoElement.parentElement.parentElement.classList.remove('alert'); alertState.active = false; }
+                        }
+
+                        detections.forEach((detection, index) => {
+                            const currentBox = normalizeBox(detection.box);
+                            if (!currentBox) return;
+                            const isMainFace = index === mainFaceIndex;
+                            overlayCtx.strokeStyle = (isMainFace && isBlurry) ? 'red' : '#3b82f6';
+                            overlayCtx.lineWidth = (isMainFace && isBlurry) ? 4 : 2;
+                            overlayCtx.strokeRect(currentBox.x, currentBox.y, currentBox.width, currentBox.height);
+                        });
+
+                        if (alertState.consecutiveBlurFrames > BLUR_ALERT_THRESHOLD_FRAMES && !alertState.active) {
+                            alertState.active = true;
+                            videoElement.parentElement.parentElement.classList.add('alert');
+                            playAlertSound();
+                        }
+                        
+                        const isDebugMode = debugModeCheckbox.checked && isPrimaryDebugTarget;
+                        if (isDebugMode) {
+                             debugContent.textContent = JSON.stringify({
+                                 timestamp: new Date().toLocaleTimeString(),
+                                 status: analysisData.scores.length > WARMUP_FRAMES ? "Active" : `Initializing... (${analysisData.scores.length}/${WARMUP_FRAMES})`,
+                                 dynamicThreshold: {
+                                    movingAverage: analysisData.average.toFixed(2),
+                                    sensitivity: `${sensitivitySlider.value}%`,
+                                    threshold: (analysisData.average * (parseFloat(sensitivitySlider.value)/100)).toFixed(2)
+                                 },
+                                 currentScore: score.toFixed(2),
+                                 isBlurry: isBlurry,
+                             }, null, 2);
+                        }
+                    } else {
+                        scoreElement.textContent = '얼굴 미검출';
+                    }
+                    analysisLoops.set(deviceId, requestAnimationFrame(loop));
+                } catch(error) {
+                    console.error("Analysis loop error:", error);
+                    const isDebugMode = debugModeCheckbox.checked && isPrimaryDebugTarget;
+                    if(isDebugMode) { 
+                        debugContent.textContent = `ANALYSIS LOOP ERROR:\n${error.stack}`;
+                    }
+                    analysisLoops.set(deviceId, requestAnimationFrame(loop));
+                }
+            }
+            loop();
+        }
+
+        function stopAllMonitoring() {
+            activeStreams.forEach(stream => stream.getTracks().forEach(track => track.stop()));
+            activeStreams = [];
+            analysisLoops.forEach(loopId => cancelAnimationFrame(loopId));
+            analysisLoops.clear();
+            cameraAnalysisData.clear(); // 카메라 데이터 초기화
+            cameraGrid.innerHTML = '';
+            debugPanel.classList.add('hidden');
+            statusText.textContent = '모니터링이 중지되었습니다. 다시 시작하려면 버튼을 누르세요.';
+            statusContainer.classList.remove('text-green-400');
+            statusContainer.classList.add('text-yellow-400');
+            openCameraSelectButton.textContent = '모니터링 시작';
+        }
+
+        async function openCameraSelectionModal() {
+            stopAllMonitoring();
+            openCameraSelectButton.disabled = true;
+            try {
+                const initialStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                initialStream.getTracks().forEach(track => track.stop());
+                
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                cameraListContainer.innerHTML = '';
+
+                if (videoDevices.length === 0) {
+                    cameraListContainer.innerHTML = '<p class="text-gray-400">사용 가능한 카메라가 없습니다.</p>';
+                } else {
+                    videoDevices.forEach((device, index) => {
+                        const label = document.createElement('label');
+                        label.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer';
+                        label.innerHTML = `<input type="checkbox" value="${device.deviceId}" class="h-4 w-4 rounded bg-gray-600 border-gray-500 text-blue-500 focus:ring-blue-500"><span class="text-gray-300">${device.label || `카메라 ${index + 1}`}</span>`;
+                        cameraListContainer.appendChild(label);
+                    });
+                }
+                cameraSelectModal.style.display = 'flex';
+            } catch (err) { 
+                statusText.textContent = `카메라 접근 오류: ${err.message}`; 
+            } finally { 
+                openCameraSelectButton.disabled = false; 
+            }
+        }
+        
+        async function startSelectedMonitoring() {
+            cameraSelectModal.style.display = 'none';
+            const selectedCheckboxes = cameraListContainer.querySelectorAll('input[type="checkbox"]:checked');
+            const selectedDeviceIds = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+            if (selectedDeviceIds.length === 0) { 
+                statusText.textContent = '선택된 카메라가 없습니다.'; 
+                return; 
+            }
+            
+            if (debugModeCheckbox.checked) {
+                debugPanel.classList.remove('hidden');
+                debugContent.textContent = '첫 번째 카메라의 분석 데이터가 표시됩니다.';
+            }
+
+            openCameraSelectButton.textContent = '모니터링 중지';
+            cameraGrid.innerHTML = '';
+            statusText.textContent = `${selectedDeviceIds.length}개의 카메라를 모니터링합니다.`;
+            statusContainer.classList.remove('text-yellow-400');
+            statusContainer.classList.add('text-green-400');
+
+            for (let i = 0; i < selectedDeviceIds.length; i++) {
+                const deviceId = selectedDeviceIds[i];
+                
+                // 각 카메라의 분석 데이터 객체 생성
+                cameraAnalysisData.set(deviceId, { scores: [], average: 0 });
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'camera-card rounded-lg p-4 flex flex-col gap-2';
+                
+                const videoContainer = document.createElement('div');
+                videoContainer.className = 'relative w-full aspect-video';
+                
+                const video = document.createElement('video');
+                video.autoplay = true; video.muted = true; video.playsInline = true;
+                video.className = 'w-full h-full rounded-md bg-black';
+                
+                const overlayCanvas = document.createElement('canvas');
+                overlayCanvas.className = 'overlay-canvas';
+                
+                videoContainer.appendChild(video); 
+                videoContainer.appendChild(overlayCanvas);
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'flex justify-between items-center';
+                
+                const label = document.createElement('p');
+                label.className = 'text-sm text-gray-400';
+                
+                const scoreEl = document.createElement('p');
+                scoreEl.className = 'font-bold text-xl';
+                scoreEl.textContent = '연결 중...';
+                
+                infoDiv.appendChild(label); 
+                infoDiv.appendChild(scoreEl);
+                wrapper.appendChild(videoContainer); 
+                wrapper.appendChild(infoDiv);
+                cameraGrid.appendChild(wrapper);
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } });
+                    activeStreams.push(stream);
+                    video.srcObject = stream;
+                    
+                    const device = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === deviceId);
+                    label.textContent = device.label || `카메라 ${i + 1}`;
+                    
+                    const processCanvas = document.createElement('canvas');
+                    processCanvas.className = 'hidden';
+                    wrapper.appendChild(processCanvas);
+                    
+                    const isPrimaryDebugTarget = (i === 0);
+
+                    video.onplaying = () => { 
+                        processCanvas.width = video.videoWidth;
+                        processCanvas.height = video.videoHeight;
+                        overlayCanvas.width = video.videoWidth;
+                        overlayCanvas.height = video.videoHeight;
+
+                        startAnalysisLoop(video, processCanvas, overlayCanvas, scoreEl, device.deviceId, isPrimaryDebugTarget); 
+                    };
+
+                } catch (err) {
+                    console.error(`카메라 ${deviceId} 열기 실패:`, err.name, err.message);
+                    wrapper.classList.add('error');
+                    const errorPlaceholder = document.createElement('div');
+                    errorPlaceholder.className = 'w-full h-full bg-black rounded-md flex items-center justify-center text-center p-4';
+                    errorPlaceholder.innerHTML = `<p class="text-yellow-400">카메라 열기 실패<br><span class="text-sm text-gray-400">${err.name}</span></p>`;
+                    videoContainer.replaceChild(errorPlaceholder, video);
+                    scoreEl.textContent = '오류';
+                }
+            }
+        }
+
+        async function initializeApp() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusText.textContent = "오류: 이 브라우저에서는 카메라 기능을 지원하지 않습니다.";
+                loadingSpinner.style.display = 'none';
+                openCameraSelectButton.disabled = true; 
+                return;
+            }
+            try {
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                modelsLoaded = true;
+                statusText.textContent = '모델 로딩 완료! 모니터링 시작 버튼을 누르세요.';
+                loadingSpinner.style.display = 'none';
+                openCameraSelectButton.disabled = false;
+            } catch (error) {
+                statusText.textContent = '얼굴 인식 모델 로딩 실패. 새로고침 해주세요.';
+                loadingSpinner.style.display = 'none';
+                console.error("Face-api model loading failed:", error);
+            }
+        }
+        
+        // --- Event Listeners ---
+        openCameraSelectButton.addEventListener('click', () => {
+             if (activeStreams.length > 0) stopAllMonitoring();
+             else openCameraSelectionModal();
+        });
+
+        modalCancelButton.addEventListener('click', () => { cameraSelectModal.style.display = 'none'; });
+        modalStartButton.addEventListener('click', startSelectedMonitoring);
+        
+        // 슬라이더 이벤트 리스너 변경
+        sensitivitySlider.addEventListener('input', (event) => { 
+            sensitivityValueEl.textContent = `${event.target.value}%`; 
+        });
+        
+        debugModeCheckbox.addEventListener('change', () => {
+            const isDebug = debugModeCheckbox.checked;
+            debugPanel.classList.toggle('hidden', !isDebug);
+            if (isDebug && activeStreams.length > 0) {
+                 debugContent.textContent = '첫 번째 카메라의 분석 데이터가 표시됩니다.';
+            } else if (isDebug) {
+                 debugContent.textContent = '디버그 모드를 켜고 분석을 시작하세요.';
+            }
+        });
+
+        initializeApp();
+    </script>
+</body>
+</html>
