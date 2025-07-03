@@ -76,12 +76,18 @@
         <div id="blur-log-panel" class="mt-8 bg-gray-800 p-4 rounded-xl shadow-lg hidden">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-white font-bold text-lg">흐림 감지 로그</h3>
-                <div class="flex gap-2">
-                    <button id="load-history-button" class="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700">기록 불러오기</button>
-                    <button id="clear-log-button" class="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">모든 기록 지우기</button>
+                <div class="flex gap-2 items-center">
+                    <select id="session-history-select" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        <option selected value="">세션 기록 선택...</option>
+                    </select>
+                    <button id="clear-log-button" title="모든 기록 지우기" class="p-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3-fill" viewBox="0 0 16 16">
+                            <path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m3 0l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m3 .5a.5.5 0 0 0-1 0v8.5a.5.5 0 0 0 1 0z"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
-            <div id="blur-log-container" class="space-y-6 max-h-[60vh] overflow-y-auto pr-2"></div>
+            <div id="blur-log-container" class="space-y-6 max-h-[75vh] overflow-y-auto pr-2"></div>
         </div>
 
         <div id="debug-panel" class="mt-8 bg-gray-900 text-gray-400 font-mono text-xs p-4 rounded-lg hidden"></div>
@@ -101,14 +107,14 @@
     <script>
         // --- DOM Elements & Constants ---
         const UIElements = {
-            mainActionButton: document.getElementById('main-action-button'), statusContainer: document.getElementById('status-container'), statusText: document.getElementById('status-text'), loadingSpinner: document.getElementById('loading-spinner'), cameraGrid: document.getElementById('camera-grid'), thresholdSlider: document.getElementById('threshold-slider'), thresholdInput: document.getElementById('threshold-input'), extractBlurCheckbox: document.getElementById('extract-blur-checkbox'), muteCheckbox: document.getElementById('mute-checkbox'), debugPanel: document.getElementById('debug-panel'), blurLogPanel: document.getElementById('blur-log-panel'), blurLogContainer: document.getElementById('blur-log-container'), clearLogButton: document.getElementById('clear-log-button'), loadHistoryButton: document.getElementById('load-history-button'), cameraSelectModal: document.getElementById('camera-select-modal'), cameraListContainer: document.getElementById('camera-list'), modalCancelButton: document.getElementById('modal-cancel-button'), modalStartButton: document.getElementById('modal-start-button'), sizeSelector: document.getElementById('size-selector'), customSizeContainer: document.getElementById('custom-size-container'), customWidthInput: document.getElementById('custom-width-input'),
+            mainActionButton: document.getElementById('main-action-button'), statusContainer: document.getElementById('status-container'), statusText: document.getElementById('status-text'), loadingSpinner: document.getElementById('loading-spinner'), cameraGrid: document.getElementById('camera-grid'), thresholdSlider: document.getElementById('threshold-slider'), thresholdInput: document.getElementById('threshold-input'), extractBlurCheckbox: document.getElementById('extract-blur-checkbox'), muteCheckbox: document.getElementById('mute-checkbox'), debugPanel: document.getElementById('debug-panel'), blurLogPanel: document.getElementById('blur-log-panel'), blurLogContainer: document.getElementById('blur-log-container'), clearLogButton: document.getElementById('clear-log-button'), sessionHistorySelect: document.getElementById('session-history-select'), cameraSelectModal: document.getElementById('camera-select-modal'), cameraListContainer: document.getElementById('camera-list'), modalCancelButton: document.getElementById('modal-cancel-button'), modalStartButton: document.getElementById('modal-start-button'), sizeSelector: document.getElementById('size-selector'), customSizeContainer: document.getElementById('custom-size-container'), customWidthInput: document.getElementById('custom-width-input'),
         };
         const CONSTANTS = {
-            DB_NAME: 'FocusMonitorDB', DB_VERSION: 1, STORE_NAME: 'blurLogs', WEIGHTS_URL: 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights', ALERT_SOUND_NOTE: "C5", ALERT_SOUND_DURATION: "8n", ALERT_COOLDOWN: 1000, MOTION_THRESHOLD: 5.0,
-            SETTINGS_STORAGE_KEY: 'focusMonitorSettings_v8_blurOnly'
+            DB_NAME: 'FocusMonitorDB', DB_VERSION: 2, STORE_NAME: 'blurLogs', WEIGHTS_URL: 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights', ALERT_SOUND_NOTE: "C5", ALERT_SOUND_DURATION: "8n", ALERT_COOLDOWN: 1000, MOTION_THRESHOLD: 5.0,
+            SETTINGS_STORAGE_KEY: 'focusMonitorSettings_v9_blurOnly'
         };
         const AppState = {
-            db: null, modelsLoaded: false, isMonitoring: false, audioContextStarted: false, activeStreams: [], analysisLoops: new Map(), cameraData: new Map(),
+            db: null, modelsLoaded: false, isMonitoring: false, audioContextStarted: false, activeStreams: [], analysisLoops: new Map(), cameraData: new Map(), currentSessionId: null,
         };
 
         // --- Database Handler ---
@@ -120,40 +126,23 @@
                     request.onsuccess = event => { AppState.db = event.target.result; resolve(); };
                     request.onupgradeneeded = event => {
                         const db = event.target.result;
-                        db.createObjectStore(CONSTANTS.STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                        if (!db.objectStoreNames.contains(CONSTANTS.STORE_NAME)) {
+                            const store = db.createObjectStore(CONSTANTS.STORE_NAME, { keyPath: 'id', autoIncrement: true });
+                            store.createIndex('sessionId', 'sessionId', { unique: false });
+                        } else if (event.oldVersion < 2) {
+                            const transaction = event.target.transaction;
+                            const store = transaction.objectStore(CONSTANTS.STORE_NAME);
+                            if (!store.indexNames.contains('sessionId')) {
+                                store.createIndex('sessionId', 'sessionId', { unique: false });
+                            }
+                        }
                     };
                 });
             },
-            addLog(log) {
-                if (!AppState.db) return Promise.reject("DB not initialized");
-                return new Promise((resolve, reject) => {
-                    const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readwrite');
-                    const store = transaction.objectStore(CONSTANTS.STORE_NAME);
-                    const request = store.add(log);
-                    request.onsuccess = resolve;
-                    request.onerror = () => reject(request.error);
-                });
-            },
-            getAllLogs() {
-                if (!AppState.db) return Promise.reject("DB not initialized");
-                return new Promise((resolve, reject) => {
-                    const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readonly');
-                    const store = transaction.objectStore(CONSTANTS.STORE_NAME);
-                    const request = store.getAll();
-                    request.onsuccess = () => resolve(request.result);
-                    request.onerror = () => reject(request.error);
-                });
-            },
-            clearLogs() {
-                if (!AppState.db) return Promise.reject("DB not initialized");
-                return new Promise((resolve, reject) => {
-                    const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readwrite');
-                    const store = transaction.objectStore(CONSTANTS.STORE_NAME);
-                    const request = store.clear();
-                    request.onsuccess = resolve;
-                    request.onerror = () => reject(request.error);
-                });
-            }
+            addLog(log) { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readwrite'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const request = store.add(log); request.onsuccess = resolve; request.onerror = () => reject(request.error); }); },
+            getAllLogs() { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readonly'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const request = store.getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); },
+            getLogsBySession(sessionId) { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readonly'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const index = store.index('sessionId'); const request = index.getAll(sessionId); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); },
+            clearLogs() { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readwrite'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const request = store.clear(); request.onsuccess = resolve; request.onerror = () => reject(request.error); }); }
         };
 
         // --- Audio & Settings ---
@@ -169,7 +158,6 @@
             const grid = UIElements.cameraGrid;
             ['size-480p', 'size-720p', 'size-1080p'].forEach(c => grid.classList.remove(c));
             document.querySelectorAll('.camera-card').forEach(card => card.style.maxWidth = '');
-
             UIElements.customSizeContainer.classList.toggle('hidden', size !== 'custom');
             
             if (size.endsWith('p')) {
@@ -180,14 +168,34 @@
                     document.querySelectorAll('.camera-card').forEach(card => card.style.maxWidth = `${customWidth}px`);
                 }
             }
-
             const buttons = UIElements.sizeSelector.querySelectorAll('.size-btn');
             buttons.forEach(btn => btn.classList.remove('active'));
             const activeBtn = UIElements.sizeSelector.querySelector(`[data-size="${size}"]`);
             if (activeBtn) activeBtn.classList.add('active');
         }
 
-        // --- Log Rendering ---
+        // --- Log & Session Management ---
+        async function loadSessionList() {
+            const logs = await DB.getAllLogs();
+            const sessions = logs.reduce((acc, log) => {
+                acc[log.sessionId] = acc[log.sessionId] || [];
+                acc[log.sessionId].push(log);
+                return acc;
+            }, {});
+
+            const select = UIElements.sessionHistorySelect;
+            select.innerHTML = '<option selected value="">세션 기록 선택...</option>';
+
+            Object.entries(sessions)
+                .sort(([a], [b]) => b - a) // Sort sessions by timestamp descending
+                .forEach(([sessionId, sessionLogs]) => {
+                    const lastLog = sessionLogs.reduce((latest, current) => new Date(latest.timestamp) > new Date(current.timestamp) ? latest : current);
+                    const option = document.createElement('option');
+                    option.value = sessionId;
+                    option.textContent = `세션: ${lastLog.timestamp} (${sessionLogs.length}개)`;
+                    select.appendChild(option);
+                });
+        }
         function renderLog(logs) { UIElements.blurLogContainer.innerHTML = ''; if (logs.length > 0) { UIElements.blurLogPanel.classList.remove('hidden'); } else { UIElements.blurLogPanel.classList.add('hidden'); } logs.sort((a, b) => b.id - a.id).forEach(entry => { const logItem = createLogItemElement(entry); UIElements.blurLogContainer.appendChild(logItem); }); }
         function prependLog(entry) { if (UIElements.blurLogPanel.classList.contains('hidden')) { UIElements.blurLogPanel.classList.remove('hidden'); } UIElements.blurLogContainer.prepend(createLogItemElement(entry)); }
         function createLogItemElement(entry) { const logItem = document.createElement('div'); logItem.className = 'bg-gray-700 p-3 rounded-lg'; const createFrame = (title, color, dataUrl, score) => { const wrapper = document.createElement('div'); wrapper.className = 'text-center'; wrapper.innerHTML = `<p class="font-semibold mb-1 ${color}">${title}</p><p class="font-mono text-xs text-gray-400 -mt-1 mb-2">(점수: ${score})</p><canvas class="w-full rounded-lg bg-black"></canvas>`; const canvas = wrapper.querySelector('canvas'); const img = new Image(); img.onload = () => { canvas.width = img.width; canvas.height = img.height; canvas.getContext('2d').drawImage(img, 0, 0); }; img.src = dataUrl; return wrapper; }; logItem.innerHTML = `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`; const framesContainer = document.createElement('div'); framesContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; if (entry.clearFrameUrl) { framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1))); } framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1))); logItem.appendChild(framesContainer); return logItem; }
@@ -235,7 +243,7 @@
                                 frameCaptureCanvas.height = video.videoHeight;
                                 frameCaptureCanvas.getContext('2d').drawImage(video, 0, 0);
                                 const blurryFrameUrl = frameCaptureCanvas.toDataURL('image/jpeg');
-                                const logEntry = { timestamp: new Date().toLocaleString(), clearFrameUrl: cameraData.lastClearFrame.url, blurryFrameUrl, clearScore: cameraData.lastClearFrame.score, blurryScore: blurScore };
+                                const logEntry = { sessionId: AppState.currentSessionId, timestamp: new Date().toLocaleString(), clearFrameUrl: cameraData.lastClearFrame.url, blurryFrameUrl, clearScore: cameraData.lastClearFrame.score, blurryScore: blurScore };
                                 DB.addLog(logEntry).then(() => prependLog(logEntry)).catch(console.error);
                             }
                         }
@@ -261,15 +269,18 @@
         }
 
         // --- Monitoring Control ---
-        function stopAllMonitoring() { AppState.isMonitoring = false; AppState.activeStreams.forEach(s => s.getTracks().forEach(t => t.stop())); AppState.analysisLoops.forEach(id => cancelAnimationFrame(id)); AppState.cameraData.forEach(d => d.resizeObserver?.disconnect()); AppState.activeStreams = []; AppState.analysisLoops.clear(); AppState.cameraData.clear(); UIElements.cameraGrid.innerHTML = ''; UIElements.debugPanel.classList.add('hidden'); UIElements.blurLogPanel.classList.add('hidden'); UIElements.mainActionButton.textContent = '모니터링 시작'; updateStatus('모니터링이 중지되었습니다.', 'ready'); }
+        function stopAllMonitoring() { AppState.isMonitoring = false; AppState.activeStreams.forEach(s => s.getTracks().forEach(t => t.stop())); AppState.analysisLoops.forEach(id => cancelAnimationFrame(id)); AppState.cameraData.forEach(d => d.resizeObserver?.disconnect()); AppState.activeStreams = []; AppState.analysisLoops.clear(); AppState.cameraData.clear(); AppState.currentSessionId = null; UIElements.cameraGrid.innerHTML = ''; UIElements.debugPanel.classList.add('hidden'); UIElements.blurLogPanel.classList.add('hidden'); UIElements.mainActionButton.textContent = '모니터링 시작'; updateStatus('모니터링이 중지되었습니다.', 'ready'); loadSessionList(); }
         async function startSelectedMonitoring() {
             UIElements.cameraSelectModal.style.display = 'none';
             const selectedIds = Array.from(UIElements.cameraListContainer.querySelectorAll('input:checked')).map(cb => cb.value);
             if (selectedIds.length === 0) { updateStatus('선택된 카메라가 없습니다.', 'error'); return; }
 
             AppState.isMonitoring = true;
+            AppState.currentSessionId = Date.now();
             UIElements.mainActionButton.textContent = '모니터링 중지';
             UIElements.cameraGrid.innerHTML = '';
+            UIElements.blurLogContainer.innerHTML = ''; // Clear previous session logs from view
+            UIElements.blurLogPanel.classList.add('hidden');
             if (UIElements.extractBlurCheckbox.checked) UIElements.debugPanel.classList.remove('hidden');
             updateStatus(`${selectedIds.length}개의 카메라를 모니터링합니다.`, 'monitoring');
 
@@ -338,6 +349,7 @@
             
             try {
                 await DB.init();
+                await loadSessionList();
                 updateStatus('얼굴 인식 모델 로딩 중...', 'loading');
                 await faceapi.nets.tinyFaceDetector.loadFromUri(CONSTANTS.WEIGHTS_URL);
                 AppState.modelsLoaded = true;
@@ -349,8 +361,16 @@
             UIElements.mainActionButton.addEventListener('click', () => { AppState.isMonitoring ? stopAllMonitoring() : openCameraSelectionModal(); });
             UIElements.modalCancelButton.addEventListener('click', () => UIElements.cameraSelectModal.style.display = 'none');
             UIElements.modalStartButton.addEventListener('click', startSelectedMonitoring);
-            UIElements.loadHistoryButton.addEventListener('click', () => { DB.getAllLogs().then(renderLog).catch(console.error); });
-            UIElements.clearLogButton.addEventListener('click', () => { if(confirm('정말로 모든 기록을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) { DB.clearLogs().then(() => renderLog([])).catch(console.error); } });
+            UIElements.sessionHistorySelect.addEventListener('change', (e) => {
+                const sessionId = e.target.value;
+                if (sessionId) {
+                    DB.getLogsBySession(Number(sessionId)).then(renderLog).catch(console.error);
+                } else {
+                    UIElements.blurLogContainer.innerHTML = '';
+                    UIElements.blurLogPanel.classList.add('hidden');
+                }
+            });
+            UIElements.clearLogButton.addEventListener('click', () => { if(confirm('정말로 모든 기록을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) { DB.clearLogs().then(() => { renderLog([]); loadSessionList(); }).catch(console.error); } });
             
             const slider = UIElements.thresholdSlider;
             const input = UIElements.thresholdInput;
