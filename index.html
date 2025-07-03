@@ -3,25 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 0.17 (DB 저장 및 오류 수정)</title>
+    <title>실시간 포커스 모니터 Ver 1.05</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <style>
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #111827; color: #f3f4f6; }
-        .camera-card { background-color: #1f2937; border: 2px solid #374151; transition: all 0.3s ease-in-out; }
+        .camera-card { background-color: #1f2937; border: 2px solid #374151; transition: border-color 0.3s ease-in-out; }
         .camera-card.alert { border-color: #ef4444; animation: pulse-red 1s infinite; }
         @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } }
         .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
         input[type=number]::-webkit-inner-spin-button,
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
-        .size-btn.active { background-color: #4f46e5; color: white; }
-        #camera-grid { justify-items: center; }
-        .size-480p .camera-card { max-width: 640px; }
-        .size-720p .camera-card { max-width: 853px; }
-        .size-1080p .camera-card { max-width: 1280px; }
     </style>
 </head>
 <body class="antialiased">
@@ -29,71 +23,53 @@
     <div class="container mx-auto max-w-7xl p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span class="text-base align-middle text-gray-400">Ver 0.17</span>
+                실시간 포커스 모니터 <span class="text-base align-middle text-gray-400">(MediaPipe Version)</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span id="status-text">얼굴 인식 모델을 로딩 중입니다...</span>
+                <span id="status-text">초기화 시작...</span>
             </p>
         </header>
 
-        <!-- Control Panel -->
-        <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 flex flex-col items-center gap-4">
-            <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-4">
-                <div class="flex items-center gap-3">
-                    <label class="text-lg font-medium">초점 기준:</label>
-                    <input type="range" id="threshold-slider" min="10" max="200" value="40" class="w-32 md:w-40 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
-                    <input type="number" id="threshold-input" min="10" max="200" value="40" class="font-bold text-xl md:text-2xl text-blue-400 w-20 md:w-24 text-center bg-gray-700 rounded-md border-gray-600">
-                </div>
-                <div class="flex items-center gap-3">
-                    <label class="text-lg font-medium">출력 크기:</label>
-                    <div id="size-selector" class="flex gap-1 rounded-lg bg-gray-700 p-1">
-                        <button data-size="auto" class="size-btn px-3 py-1 text-sm rounded-md">자동</button>
-                        <button data-size="480p" class="size-btn px-3 py-1 text-sm rounded-md">480p</button>
-                        <button data-size="720p" class="size-btn px-3 py-1 text-sm rounded-md">720p</button>
-                        <button data-size="1080p" class="size-btn px-3 py-1 text-sm rounded-md">1080p</button>
-                        <button data-size="custom" class="size-btn px-3 py-1 text-sm rounded-md">지정</button>
-                    </div>
-                </div>
-                 <div id="custom-size-container" class="flex items-center gap-2 hidden">
-                    <input type="number" id="custom-width-input" placeholder="너비(px)" class="font-bold text-lg text-blue-400 w-28 text-center bg-gray-700 rounded-md border-gray-600">
-                </div>
+        <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 flex flex-col md:flex-row items-center justify-center gap-6">
+            <div class="flex items-center gap-3">
+                <label for="threshold-slider" class="text-lg font-medium">기준 점수:</label>
+                <input type="range" id="threshold-slider" min="10" max="150" value="40" class="w-48 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                <input type="number" id="threshold-input" min="10" max="150" value="40" class="font-bold text-2xl text-blue-400 w-20 text-center bg-gray-700 rounded-md border-gray-600">
             </div>
-            <div class="mt-2 flex flex-col md:flex-row items-center justify-center gap-4">
-                <button id="main-action-button" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed w-full md:w-auto" disabled>모니터링 시작</button>
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center"><input id="extract-blur-checkbox" type="checkbox" class="h-4 w-4 rounded"><label for="extract-blur-checkbox" class="ml-2">흐림 추출하기</label></div>
-                    <div class="flex items-center"><input id="mute-checkbox" type="checkbox" class="h-4 w-4 rounded"><label for="mute-checkbox" class="ml-2">음소거</label></div>
-                </div>
+            <button id="open-camera-select-button" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>모니터링 시작</button>
+             <div class="flex items-center">
+                <input id="debug-mode-checkbox" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" checked>
+                <label for="debug-mode-checkbox" class="ml-2 block text-sm text-gray-300">디버그 모드 활성화</label>
             </div>
         </div>
         
         <div id="camera-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-        
+
         <div id="blur-log-panel" class="mt-8 bg-gray-800 p-4 rounded-xl shadow-lg hidden">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-white font-bold text-lg">흐림 감지 로그</h3>
-                <div class="flex gap-2 items-center">
-                    <select id="session-history-select" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
-                        <option selected value="">세션 기록 선택...</option>
-                    </select>
-                    <button id="clear-log-button" title="모든 기록 지우기" class="p-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3-fill" viewBox="0 0 16 16">
-                            <path d="M11 1.5v1h3.5a.5.5 0 0 1 0 1h-.538l-.853 10.66A2 2 0 0 1 11.115 16h-6.23a2 2 0 0 1-1.994-1.84L2.038 3.5H1.5a.5.5 0 0 1 0-1H5v-1A1.5 1.5 0 0 1 6.5 0h3A1.5 1.5 0 0 1 11 1.5m-5 0v1h4v-1a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5M4.5 5.029l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m3 0l.5 8.5a.5.5 0 1 0 .998-.06l-.5-8.5a.5.5 0 1 0-.998.06m3 .5a.5.5 0 0 0-1 0v8.5a.5.5 0 0 0 1 0z"/>
-                        </svg>
-                    </button>
-                </div>
+                <h3 class="text-white font-bold text-lg">흐림 감지 로그 (첫 번째 카메라)</h3>
+                <button id="clear-log-button" class="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">로그 지우기</button>
             </div>
-            <div id="blur-log-container" class="space-y-6 max-h-[75vh] overflow-y-auto pr-2"></div>
+            <div id="blur-log-container" class="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+            </div>
         </div>
 
-        <div id="debug-panel" class="mt-8 bg-gray-900 text-gray-400 font-mono text-xs p-4 rounded-lg hidden"></div>
+        <div id="debug-panel" class="mt-8 bg-gray-900 text-gray-400 p-4 rounded-lg">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-white font-bold text-lg">상세 분석 로그 (첫 번째 카메라)</h3>
+                <button id="clear-debug-log-button" class="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500">로그 지우기</button>
+            </div>
+            <div id="debug-log-container" class="font-mono text-xs space-y-2 max-h-60 overflow-y-auto bg-black p-2 rounded-md">
+            </div>
+        </div>
     </div>
     
-    <div id="camera-select-modal" class="fixed inset-0 z-50 items-center justify-center hidden bg-black bg-opacity-75">
+    <div id="camera-select-modal" class="fixed inset-0 z-50 items-center justify-center hidden">
+        <div class="fixed inset-0 bg-black bg-opacity-75"></div>
         <div class="relative bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-lg m-4">
             <h3 class="text-lg font-bold mb-4 text-white">모니터링할 카메라 선택</h3>
             <div id="camera-list" class="space-y-2 max-h-64 overflow-y-auto pr-2 mb-6"></div>
@@ -104,304 +80,584 @@
         </div>
     </div>
 
-    <script>
-        // --- DOM Elements & Constants ---
-        const UIElements = {
-            mainActionButton: document.getElementById('main-action-button'), statusContainer: document.getElementById('status-container'), statusText: document.getElementById('status-text'), loadingSpinner: document.getElementById('loading-spinner'), cameraGrid: document.getElementById('camera-grid'), thresholdSlider: document.getElementById('threshold-slider'), thresholdInput: document.getElementById('threshold-input'), extractBlurCheckbox: document.getElementById('extract-blur-checkbox'), muteCheckbox: document.getElementById('mute-checkbox'), debugPanel: document.getElementById('debug-panel'), blurLogPanel: document.getElementById('blur-log-panel'), blurLogContainer: document.getElementById('blur-log-container'), clearLogButton: document.getElementById('clear-log-button'), sessionHistorySelect: document.getElementById('session-history-select'), cameraSelectModal: document.getElementById('camera-select-modal'), cameraListContainer: document.getElementById('camera-list'), modalCancelButton: document.getElementById('modal-cancel-button'), modalStartButton: document.getElementById('modal-start-button'), sizeSelector: document.getElementById('size-selector'), customSizeContainer: document.getElementById('custom-size-container'), customWidthInput: document.getElementById('custom-width-input'),
-        };
-        const CONSTANTS = {
-            DB_NAME: 'FocusMonitorDB', DB_VERSION: 2, STORE_NAME: 'blurLogs', WEIGHTS_URL: 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights', ALERT_SOUND_NOTE: "C5", ALERT_SOUND_DURATION: "8n", ALERT_COOLDOWN: 1000, MOTION_THRESHOLD: 5.0,
-            SETTINGS_STORAGE_KEY: 'focusMonitorSettings_v9_blurOnly'
-        };
-        const AppState = {
-            db: null, modelsLoaded: false, isMonitoring: false, audioContextStarted: false, activeStreams: [], analysisLoops: new Map(), cameraData: new Map(), currentSessionId: null,
-        };
+    <script type="module">
+        // 올바른 주소로 정적 import 실행
+        import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
 
-        // --- Database Handler ---
-        const DB = {
-            init() {
-                return new Promise((resolve, reject) => {
-                    const request = indexedDB.open(CONSTANTS.DB_NAME, CONSTANTS.DB_VERSION);
-                    request.onerror = event => reject("IndexedDB error: " + event.target.errorCode);
-                    request.onsuccess = event => { AppState.db = event.target.result; resolve(); };
-                    request.onupgradeneeded = event => {
-                        const db = event.target.result;
-                        if (!db.objectStoreNames.contains(CONSTANTS.STORE_NAME)) {
-                            const store = db.createObjectStore(CONSTANTS.STORE_NAME, { keyPath: 'id', autoIncrement: true });
-                            store.createIndex('sessionId', 'sessionId', { unique: false });
-                        } else if (event.oldVersion < 2) {
-                            const transaction = event.target.transaction;
-                            const store = transaction.objectStore(CONSTANTS.STORE_NAME);
-                            if (!store.indexNames.contains('sessionId')) {
-                                store.createIndex('sessionId', 'sessionId', { unique: false });
-                            }
-                        }
-                    };
-                });
-            },
-            addLog(log) { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readwrite'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const request = store.add(log); request.onsuccess = resolve; request.onerror = () => reject(request.error); }); },
-            getAllLogs() { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readonly'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const request = store.getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); },
-            getLogsBySession(sessionId) { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readonly'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const index = store.index('sessionId'); const request = index.getAll(sessionId); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); },
-            clearLogs() { if (!AppState.db) return Promise.reject("DB not initialized"); return new Promise((resolve, reject) => { const transaction = AppState.db.transaction([CONSTANTS.STORE_NAME], 'readwrite'); const store = transaction.objectStore(CONSTANTS.STORE_NAME); const request = store.clear(); request.onsuccess = resolve; request.onerror = () => reject(request.error); }); }
-        };
+        // --- DOM Elements ---
+        const openCameraSelectButton = document.getElementById('open-camera-select-button');
+        const statusContainer = document.getElementById('status-container');
+        const statusText = document.getElementById('status-text');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const cameraGrid = document.getElementById('camera-grid');
+        const thresholdSlider = document.getElementById('threshold-slider');
+        const thresholdInput = document.getElementById('threshold-input');
+        const cameraSelectModal = document.getElementById('camera-select-modal');
+        const cameraListContainer = document.getElementById('camera-list');
+        const modalCancelButton = document.getElementById('modal-cancel-button');
+        const modalStartButton = document.getElementById('modal-start-button');
+        const debugModeCheckbox = document.getElementById('debug-mode-checkbox');
+        const debugPanel = document.getElementById('debug-panel');
+        const debugLogContainer = document.getElementById('debug-log-container');
+        const clearDebugLogButton = document.getElementById('clear-debug-log-button');
+        const blurLogPanel = document.getElementById('blur-log-panel');
+        const blurLogContainer = document.getElementById('blur-log-container');
+        const clearLogButton = document.getElementById('clear-log-button');
 
-        // --- Audio & Settings ---
+        // --- Constants ---
+        const ALERT_SOUND_NOTE = "C5";
+        const ALERT_SOUND_DURATION = "8n";
+        const MOTION_THRESHOLD = 5.0;
+        const ALERT_COOLDOWN = 1000;
+        const MAX_DEBUG_LOGS = 100;
+
+        // --- State Variables ---
+        let faceDetector;
+        const analysisLoops = new Map();
+        let audioContextStarted = false;
+        let activeStreams = [];
+        const cameraAnalysisData = new Map();
+        const blurLogEntries = [];
+        const debugLogEntries = [];
+        
+        // --- Audio Setup ---
         const synth = new Tone.Synth().toDestination();
-        function playAlertSound() { if (!UIElements.muteCheckbox.checked) { if (!AppState.audioContextStarted) { Tone.start(); AppState.audioContextStarted = true; } synth.triggerAttackRelease(CONSTANTS.ALERT_SOUND_NOTE, CONSTANTS.ALERT_SOUND_DURATION); } }
-        function saveSettings() { const settings = { threshold: UIElements.thresholdInput.value, extractBlur: UIElements.extractBlurCheckbox.checked, isMuted: UIElements.muteCheckbox.checked, size: UIElements.sizeSelector.querySelector('.active')?.dataset.size || 'auto', customWidth: UIElements.customWidthInput.value }; localStorage.setItem(CONSTANTS.SETTINGS_STORAGE_KEY, JSON.stringify(settings)); }
-        function loadSettings() { const saved = localStorage.getItem(CONSTANTS.SETTINGS_STORAGE_KEY); if (saved) { const s = JSON.parse(saved); UIElements.thresholdInput.value = s.threshold || 40; UIElements.thresholdSlider.value = s.threshold || 40; UIElements.extractBlurCheckbox.checked = s.extractBlur || false; UIElements.muteCheckbox.checked = s.isMuted || false; UIElements.customWidthInput.value = s.customWidth || ''; applySize(s.size || 'auto'); } else { applySize('auto'); } }
+        function playAlertSound() {
+            if (!audioContextStarted) { 
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                audioContextStarted = true; 
+            }
+            synth.triggerAttackRelease(ALERT_SOUND_NOTE, ALERT_SOUND_DURATION);
+        }
 
-        // --- Core Analysis & UI Functions ---
-        function calculateFocusScore(imageData) { const { width, height, data } = imageData; if (width < 2 || height < 2) return 0; const gray = new Uint8Array(width * height); for (let i = 0; i < data.length; i += 4) { gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]; } let variance = 0; for (let y = 1; y < height - 1; y++) { for (let x = 1; x < width - 1; x++) { const i = y * width + x; const laplacian = Math.abs(gray[i - width] + gray[i + width] + gray[i - 1] + gray[i + 1] - 4 * gray[i]); variance += laplacian * laplacian; } } return variance / ((width - 2) * (height - 2)); }
-        function updateStatus(text, state = 'loading') { UIElements.statusText.textContent = text; UIElements.loadingSpinner.style.display = (state === 'loading') ? 'block' : 'none'; UIElements.statusContainer.className = `text-lg mt-2 flex items-center justify-center gap-2 ${ state === 'ready' ? 'text-yellow-400' : state === 'monitoring' ? 'text-green-400' : 'text-red-500' }`; }
-        function applySize(size) {
-            const grid = UIElements.cameraGrid;
-            ['size-480p', 'size-720p', 'size-1080p'].forEach(c => grid.classList.remove(c));
-            document.querySelectorAll('.camera-card').forEach(card => card.style.maxWidth = '');
-            UIElements.customSizeContainer.classList.toggle('hidden', size !== 'custom');
-            
-            if (size.endsWith('p')) {
-                grid.classList.add(`size-${size}`);
-            } else if (size === 'custom') {
-                const customWidth = UIElements.customWidthInput.value;
-                if (customWidth && parseInt(customWidth) > 0) {
-                    document.querySelectorAll('.camera-card').forEach(card => card.style.maxWidth = `${customWidth}px`);
+        function calculateFocusScore(imageData) {
+            const { width, height, data } = imageData;
+            if (width === 0 || height === 0) return 0;
+            const gray = new Uint8Array(width * height);
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i], g = data[i + 1], b = data[i + 2];
+                gray[i / 4] = 0.299 * r + 0.587 * g + 0.114 * b;
+            }
+            const laplacianValues = [];
+            for (let y = 1; y < height - 1; y++) {
+                for (let x = 1; x < width - 1; x++) {
+                    const i = y * width + x;
+                    const laplacian = gray[i - width] + gray[i + width] + gray[i - 1] + gray[i + 1] - 4 * gray[i];
+                    laplacianValues.push(laplacian);
                 }
             }
-            const buttons = UIElements.sizeSelector.querySelectorAll('.size-btn');
-            buttons.forEach(btn => btn.classList.remove('active'));
-            const activeBtn = UIElements.sizeSelector.querySelector(`[data-size="${size}"]`);
-            if (activeBtn) activeBtn.classList.add('active');
+            if (laplacianValues.length === 0) return 0;
+            const mean = laplacianValues.reduce((acc, val) => acc + val, 0) / laplacianValues.length;
+            const variance = laplacianValues.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / laplacianValues.length;
+            return variance;
+        }
+        
+        function getCentermostFace(detections, videoWidth, videoHeight) {
+            if (!detections || detections.length === 0) return null;
+            if (detections.length === 1) return detections[0];
+            
+            const frameCenterX = videoWidth / 2;
+            const frameCenterY = videoHeight / 2;
+            let centermostFace = null;
+            let minDistance = Infinity;
+
+            for (const detection of detections) {
+                const box = detection.boundingBox;
+                if (!box) continue;
+                const faceCenterX = box.originX + box.width / 2;
+                const faceCenterY = box.originY + box.height / 2;
+                const distance = Math.sqrt(Math.pow(frameCenterX - faceCenterX, 2) + Math.pow(frameCenterY - faceCenterY, 2));
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    centermostFace = detection;
+                }
+            }
+            return centermostFace;
         }
 
-        // --- Log & Session Management ---
-        async function loadSessionList() {
-            const logs = await DB.getAllLogs();
-            const sessions = logs.reduce((acc, log) => {
-                acc[log.sessionId] = acc[log.sessionId] || [];
-                acc[log.sessionId].push(log);
-                return acc;
-            }, {});
+        function renderBlurLog() {
+            blurLogContainer.innerHTML = '';
+            if (blurLogEntries.length > 0) {
+                blurLogPanel.classList.remove('hidden');
+            } else {
+                blurLogPanel.classList.add('hidden');
+            }
 
-            const select = UIElements.sessionHistorySelect;
-            select.innerHTML = '<option selected value="">세션 기록 선택...</option>';
+            [...blurLogEntries].reverse().forEach(entry => {
+                const logItem = document.createElement('div');
+                logItem.className = 'bg-gray-700 p-3 rounded-lg';
 
-            Object.entries(sessions)
-                .sort(([a], [b]) => b - a) // Sort sessions by timestamp descending
-                .forEach(([sessionId, sessionLogs]) => {
-                    const lastLog = sessionLogs.reduce((latest, current) => new Date(latest.timestamp) > new Date(current.timestamp) ? latest : current);
-                    const option = document.createElement('option');
-                    option.value = sessionId;
-                    option.textContent = `세션: ${lastLog.timestamp} (${sessionLogs.length}개)`;
-                    select.appendChild(option);
-                });
+                const header = document.createElement('div');
+                header.className = 'text-center mb-2 text-sm';
+                const timeEl = document.createElement('p');
+                timeEl.className = 'text-gray-300';
+                timeEl.textContent = `감지 시간: ${entry.timestamp}`;
+                header.appendChild(timeEl);
+
+                const framesContainer = document.createElement('div');
+                framesContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+                
+                const createFrame = (title, color, dataUrl, score) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'text-center';
+                    const p = document.createElement('p');
+                    p.className = `font-semibold mb-1 ${color}`;
+                    p.textContent = title;
+                    const pScore = document.createElement('p');
+                    pScore.className = 'font-mono text-xs text-gray-400 -mt-1 mb-2';
+                    pScore.textContent = `(점수: ${score})`;
+                    
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'w-full rounded-lg bg-black';
+                    
+                    wrapper.appendChild(p);
+                    wrapper.appendChild(pScore);
+                    wrapper.appendChild(canvas);
+                    
+                    const img = new Image();
+                    img.onload = () => {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        canvas.getContext('2d').drawImage(img, 0, 0);
+                    };
+                    img.src = dataUrl;
+                    return wrapper;
+                };
+
+                if (entry.clearFrameUrl) {
+                    framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1)));
+                }
+                framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1)));
+
+                logItem.appendChild(header);
+                logItem.appendChild(framesContainer);
+                blurLogContainer.appendChild(logItem);
+            });
         }
-        function renderLog(logs) { UIElements.blurLogContainer.innerHTML = ''; if (logs.length > 0) { UIElements.blurLogPanel.classList.remove('hidden'); } else { UIElements.blurLogPanel.classList.add('hidden'); } logs.sort((a, b) => b.id - a.id).forEach(entry => { const logItem = createLogItemElement(entry); UIElements.blurLogContainer.appendChild(logItem); }); }
-        function prependLog(entry) { if (UIElements.blurLogPanel.classList.contains('hidden')) { UIElements.blurLogPanel.classList.remove('hidden'); } UIElements.blurLogContainer.prepend(createLogItemElement(entry)); }
-        function createLogItemElement(entry) { const logItem = document.createElement('div'); logItem.className = 'bg-gray-700 p-3 rounded-lg'; const createFrame = (title, color, dataUrl, score) => { const wrapper = document.createElement('div'); wrapper.className = 'text-center'; wrapper.innerHTML = `<p class="font-semibold mb-1 ${color}">${title}</p><p class="font-mono text-xs text-gray-400 -mt-1 mb-2">(점수: ${score})</p><canvas class="w-full rounded-lg bg-black"></canvas>`; const canvas = wrapper.querySelector('canvas'); const img = new Image(); img.onload = () => { canvas.width = img.width; canvas.height = img.height; canvas.getContext('2d').drawImage(img, 0, 0); }; img.src = dataUrl; return wrapper; }; logItem.innerHTML = `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`; const framesContainer = document.createElement('div'); framesContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; if (entry.clearFrameUrl) { framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1))); } framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1))); logItem.appendChild(framesContainer); return logItem; }
 
-        // --- Analysis Loop ---
-        async function startAnalysisLoop(video, pCanvas, oCanvas, card, deviceId) {
-            const pCtx = pCanvas.getContext('2d', { willReadFrequently: true });
-            const oCtx = oCanvas.getContext('2d');
-            const scoreEl = card.querySelector('.score-element');
-            const isPrimary = AppState.cameraData.size === 1;
+        function renderDebugLog() {
+            debugLogContainer.innerHTML = '';
+            [...debugLogEntries].reverse().forEach(log => {
+                const pre = document.createElement('pre');
+                pre.className = 'bg-gray-800 p-2 rounded whitespace-pre-wrap break-all';
+                pre.textContent = JSON.stringify(log, null, 2);
+                debugLogContainer.appendChild(pre);
+            });
+        }
+        
+        async function startAnalysisLoop(videoElement, processCanvas, overlayCanvas, scoreElement, deviceId, isPrimaryDebugTarget) {
+            const processCtx = processCanvas.getContext('2d', { willReadFrequently: true });
+            let alertState = { active: false, lastAlertTime: 0 };
+            const analysisData = cameraAnalysisData.get(deviceId);
+            let lastClearFrame = { url: null, score: 0 };
             const frameCaptureCanvas = document.createElement('canvas');
 
-            async function loop() {
-                if (!AppState.isMonitoring || !video.srcObject?.active) { AppState.analysisLoops.delete(deviceId); return; }
-
-                const detectionResult = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions());
-                const cameraData = AppState.cameraData.get(deviceId);
-                oCtx.clearRect(0, 0, oCanvas.width, oCanvas.height);
-
-                if (detectionResult) {
-                    const { box } = detectionResult;
-                    pCtx.drawImage(video, 0, 0, pCanvas.width, pCanvas.height);
-                    const faceImageData = pCtx.getImageData(Math.max(0, box.x), Math.max(0, box.y), Math.min(pCanvas.width - box.x, box.width), Math.min(pCanvas.height - box.y, box.height));
+            let lastTime = -1;
+            async function loop(currentTime) {
+                if (lastTime === -1) {
+                    lastTime = currentTime;
+                }
+                
+                try {
+                    if (!videoElement.srcObject || !videoElement.srcObject.active || videoElement.paused || videoElement.videoWidth === 0) {
+                        analysisLoops.delete(deviceId);
+                        return;
+                    }
                     
-                    const blurScore = calculateFocusScore(faceImageData);
-                    const currentCenter = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-                    const movementDistance = cameraData.lastPosition ? Math.hypot(currentCenter.x - cameraData.lastPosition.x, currentCenter.y - cameraData.lastPosition.y) : 0;
-                    cameraData.lastPosition = currentCenter;
-
-                    const isStationary = movementDistance < CONSTANTS.MOTION_THRESHOLD;
-                    const isBlurry = blurScore < parseFloat(UIElements.thresholdInput.value);
-                    const isOutOfFocus = isStationary && isBlurry;
+                    const detectionsResult = faceDetector.detectForVideo(videoElement, currentTime);
+                    const detections = detectionsResult.detections;
                     
-                    scoreEl.textContent = blurScore.toFixed(1);
-                    scoreEl.classList.toggle('text-red-500', isOutOfFocus);
-                    card.classList.toggle('alert', isOutOfFocus);
+                    const overlayCtx = overlayCanvas.getContext('2d');
+                    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                    
+                    if (detections.length > 0) {
+                        const mainFaceForAnalysis = getCentermostFace(detections, videoElement.videoWidth, videoElement.videoHeight);
+                        if (!mainFaceForAnalysis) {
+                            analysisData.lastPosition = null;
+                            requestAnimationFrame(loop);
+                            return;
+                        }
 
-                    if (isOutOfFocus) {
-                        const now = Date.now();
-                        if (now - cameraData.lastAlertTime > CONSTANTS.ALERT_COOLDOWN) {
-                            cameraData.lastAlertTime = now;
-                            playAlertSound();
-                            if (isPrimary && UIElements.extractBlurCheckbox.checked) {
-                                frameCaptureCanvas.width = video.videoWidth;
-                                frameCaptureCanvas.height = video.videoHeight;
-                                frameCaptureCanvas.getContext('2d').drawImage(video, 0, 0);
-                                const blurryFrameUrl = frameCaptureCanvas.toDataURL('image/jpeg');
-                                const logEntry = { sessionId: AppState.currentSessionId, timestamp: new Date().toLocaleString(), clearFrameUrl: cameraData.lastClearFrame.url, blurryFrameUrl, clearScore: cameraData.lastClearFrame.score, blurryScore: blurScore };
-                                DB.addLog(logEntry).then(() => prependLog(logEntry)).catch(console.error);
+                        const mainFaceIndex = detections.findIndex(d => d === mainFaceForAnalysis);
+                        const mainFaceRawBox = mainFaceForAnalysis.boundingBox;
+                        processCtx.drawImage(videoElement, 0, 0, processCanvas.width, processCanvas.height);
+                        
+                        const clampedX = Math.max(0, mainFaceRawBox.originX);
+                        const clampedY = Math.max(0, mainFaceRawBox.originY);
+                        const clampedWidth = Math.min(processCanvas.width - clampedX, mainFaceRawBox.width);
+                        const clampedHeight = Math.min(processCanvas.height - clampedY, mainFaceRawBox.height);
+                        const faceImageData = processCtx.getImageData(clampedX, clampedY, clampedWidth, clampedHeight);
+
+                        const score = calculateFocusScore(faceImageData);
+                        scoreElement.textContent = score.toFixed(1);
+                        
+                        const currentCenter = { x: mainFaceRawBox.originX + mainFaceRawBox.width / 2, y: mainFaceRawBox.originY + mainFaceRawBox.height / 2 };
+                        let movementDistance = 0;
+                        if (analysisData.lastPosition) {
+                            const dx = currentCenter.x - analysisData.lastPosition.x;
+                            const dy = currentCenter.y - analysisData.lastPosition.y;
+                            movementDistance = Math.sqrt(dx * dx + dy * dy);
+                        }
+                        analysisData.lastPosition = currentCenter;
+                        
+                        const isStationary = movementDistance < MOTION_THRESHOLD;
+                        const threshold = parseFloat(thresholdInput.value);
+                        const isScoreLow = score < threshold;
+                        const isBlurry = isScoreLow && isStationary;
+                        
+                        if (isBlurry) {
+                            scoreElement.classList.add('text-red-500');
+                            const now = Date.now();
+                            if (!alertState.active && (now - alertState.lastAlertTime > ALERT_COOLDOWN)) {
+                                alertState.active = true;
+                                alertState.lastAlertTime = now;
+                                videoElement.parentElement.parentElement.classList.add('alert');
+                                playAlertSound();
+
+                                if (isPrimaryDebugTarget) {
+                                    frameCaptureCanvas.width = videoElement.videoWidth;
+                                    frameCaptureCanvas.height = videoElement.videoHeight;
+                                    const frameCtx = frameCaptureCanvas.getContext('2d');
+                                    frameCtx.drawImage(videoElement, 0, 0);
+                                    detections.forEach((d, i) => {
+                                        const box = d.boundingBox;
+                                        if(box) {
+                                            frameCtx.strokeStyle = (i === mainFaceIndex && isBlurry) ? 'red' : '#3b82f6';
+                                            frameCtx.lineWidth = (i === mainFaceIndex && isBlurry) ? 4 : 2;
+                                            frameCtx.strokeRect(box.originX, box.originY, box.width, box.height);
+                                        }
+                                    });
+                                    const blurryFrameDataUrl = frameCaptureCanvas.toDataURL('image/jpeg');
+
+                                    blurLogEntries.push({
+                                        timestamp: new Date().toLocaleTimeString(),
+                                        clearFrameUrl: lastClearFrame.url,
+                                        blurryFrameUrl: blurryFrameDataUrl,
+                                        clearScore: lastClearFrame.score,
+                                        blurryScore: score
+                                    });
+                                    renderBlurLog();
+                                }
+                            }
+                        } else {
+                            scoreElement.classList.remove('text-red-500');
+                            if(alertState.active) {
+                                videoElement.parentElement.parentElement.classList.remove('alert');
+                                alertState.active = false;
+                            }
+                            
+                            if (!isScoreLow) {
+                                frameCaptureCanvas.width = videoElement.videoWidth;
+                                frameCaptureCanvas.height = videoElement.videoHeight;
+                                const frameCtx = frameCaptureCanvas.getContext('2d');
+                                frameCtx.drawImage(videoElement, 0, 0);
+                                detections.forEach((d, i) => {
+                                    const box = d.boundingBox;
+                                    if(box) {
+                                        frameCtx.strokeStyle = (i === mainFaceIndex) ? '#3b82f6' : '#888888';
+                                        frameCtx.lineWidth = (i === mainFaceIndex) ? 4 : 2;
+                                        frameCtx.strokeRect(box.originX, box.originY, box.width, box.height);
+                                    }
+                                });
+                                lastClearFrame.url = frameCaptureCanvas.toDataURL('image/jpeg');
+                                lastClearFrame.score = score;
                             }
                         }
-                    } else if (!isBlurry) {
-                        frameCaptureCanvas.width = video.videoWidth;
-                        frameCaptureCanvas.height = video.videoHeight;
-                        frameCaptureCanvas.getContext('2d').drawImage(video, 0, 0);
-                        cameraData.lastClearFrame = { url: frameCaptureCanvas.toDataURL('image/jpeg'), score: blurScore };
-                    }
-                    
-                    faceapi.draw.drawDetections(oCanvas, detectionResult);
 
-                    if (isPrimary && UIElements.extractBlurCheckbox.checked) {
-                        UIElements.debugPanel.textContent = JSON.stringify({ focusScore: blurScore.toFixed(1), movement: movementDistance.toFixed(2), isStationary, isBlurry, isOutOfFocus, }, null, 2);
+                        detections.forEach((detection, index) => {
+                            const currentBox = detection.boundingBox;
+                            if (!currentBox) return;
+                            const isMainFace = index === mainFaceIndex;
+                            overlayCtx.strokeStyle = (isMainFace && isBlurry) ? 'red' : '#3b82f6';
+                            overlayCtx.lineWidth = (isMainFace && isBlurry) ? 4 : 2;
+                            overlayCtx.strokeRect(currentBox.originX, currentBox.originY, currentBox.width, currentBox.height);
+                        });
+                        
+                        const isDebugMode = debugModeCheckbox.checked && isPrimaryDebugTarget;
+                        if (isDebugMode) {
+                             const logEntry = {
+                                 "1_Timestamp": new Date().toLocaleTimeString(),
+                                 "2_FaceDetection": {
+                                    "detectedCount": detections.length
+                                 },
+                                 "3_MainFaceSelection": {
+                                    "selectedIndex": mainFaceIndex,
+                                    "box": mainFaceRawBox ? {x:mainFaceRawBox.originX, y:mainFaceRawBox.originY, w:mainFaceRawBox.width, h:mainFaceRawBox.height} : null
+                                 },
+                                 "4_FocusScoreCalculation": {
+                                    "score": score.toFixed(2)
+                                 },
+                                 "5_MovementDetection": {
+                                    "distance": movementDistance.toFixed(2),
+                                    "isStationary": isStationary
+                                 },
+                                 "6_FinalDecision": {
+                                    "threshold": threshold,
+                                    "isScoreLow": isScoreLow,
+                                    "isBlurry": isBlurry,
+                                    "reason": !isStationary ? "Motion Detected" : (isScoreLow ? "Low Score" : "OK")
+                                 }
+                             };
+                             debugLogEntries.push(logEntry);
+                             if(debugLogEntries.length > MAX_DEBUG_LOGS) {
+                                debugLogEntries.shift();
+                             }
+                             renderDebugLog();
+                        }
+                    } else {
+                        scoreElement.textContent = '얼굴 미검출';
+                        analysisData.lastPosition = null;
                     }
-                } else {
-                    scoreEl.textContent = '얼굴 미검출';
-                    card.classList.remove('alert');
+                    analysisLoops.set(deviceId, requestAnimationFrame(loop));
+                } catch(error) {
+                    console.error("Analysis loop error:", error);
+                    analysisLoops.set(deviceId, requestAnimationFrame(loop));
                 }
-                AppState.analysisLoops.set(deviceId, requestAnimationFrame(loop));
             }
-            loop();
+            analysisLoops.set(deviceId, requestAnimationFrame(loop));
         }
 
-        // --- Monitoring Control ---
-        function stopAllMonitoring() { AppState.isMonitoring = false; AppState.activeStreams.forEach(s => s.getTracks().forEach(t => t.stop())); AppState.analysisLoops.forEach(id => cancelAnimationFrame(id)); AppState.cameraData.forEach(d => d.resizeObserver?.disconnect()); AppState.activeStreams = []; AppState.analysisLoops.clear(); AppState.cameraData.clear(); AppState.currentSessionId = null; UIElements.cameraGrid.innerHTML = ''; UIElements.debugPanel.classList.add('hidden'); UIElements.blurLogPanel.classList.add('hidden'); UIElements.mainActionButton.textContent = '모니터링 시작'; updateStatus('모니터링이 중지되었습니다.', 'ready'); loadSessionList(); }
+        function stopAllMonitoring() {
+            activeStreams.forEach(stream => stream.getTracks().forEach(track => track.stop()));
+            activeStreams = [];
+            analysisLoops.forEach(loopId => cancelAnimationFrame(loopId));
+            analysisLoops.clear();
+            cameraAnalysisData.clear();
+            cameraGrid.innerHTML = '';
+            debugPanel.classList.add('hidden');
+            blurLogPanel.classList.add('hidden');
+            blurLogContainer.innerHTML = '';
+            blurLogEntries.length = 0;
+            debugLogEntries.length = 0;
+            renderDebugLog();
+            statusText.textContent = '모니터링이 중지되었습니다. 다시 시작하려면 버튼을 누르세요.';
+            statusContainer.classList.remove('text-green-400');
+            statusContainer.classList.add('text-yellow-400');
+            openCameraSelectButton.textContent = '모니터링 시작';
+        }
+
+        async function openCameraSelectionModal() {
+            stopAllMonitoring();
+            openCameraSelectButton.disabled = true;
+            try {
+                const initialStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                initialStream.getTracks().forEach(track => track.stop());
+                
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                cameraListContainer.innerHTML = '';
+
+                if (videoDevices.length === 0) {
+                    cameraListContainer.innerHTML = '<p class="text-gray-400">사용 가능한 카메라가 없습니다.</p>';
+                } else {
+                    videoDevices.forEach((device, index) => {
+                        const label = document.createElement('label');
+                        label.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer';
+                        label.innerHTML = `<input type="checkbox" value="${device.deviceId}" class="h-4 w-4 rounded bg-gray-600 border-gray-500 text-blue-500 focus:ring-blue-500"><span class="text-gray-300">${device.label || `카메라 ${index + 1}`}</span>`;
+                        cameraListContainer.appendChild(label);
+                    });
+                }
+                cameraSelectModal.style.display = 'flex';
+            } catch (err) { 
+                statusText.textContent = `카메라 접근 오류: ${err.message}`; 
+            } finally { 
+                openCameraSelectButton.disabled = false; 
+            }
+        }
+        
         async function startSelectedMonitoring() {
-            UIElements.cameraSelectModal.style.display = 'none';
-            const selectedIds = Array.from(UIElements.cameraListContainer.querySelectorAll('input:checked')).map(cb => cb.value);
-            if (selectedIds.length === 0) { updateStatus('선택된 카메라가 없습니다.', 'error'); return; }
+            cameraSelectModal.style.display = 'none';
+            const selectedCheckboxes = cameraListContainer.querySelectorAll('input[type="checkbox"]:checked');
+            const selectedDeviceIds = Array.from(selectedCheckboxes).map(cb => cb.value);
 
-            AppState.isMonitoring = true;
-            AppState.currentSessionId = Date.now();
-            UIElements.mainActionButton.textContent = '모니터링 중지';
-            UIElements.cameraGrid.innerHTML = '';
-            UIElements.blurLogContainer.innerHTML = ''; // Clear previous session logs from view
-            UIElements.blurLogPanel.classList.add('hidden');
-            if (UIElements.extractBlurCheckbox.checked) UIElements.debugPanel.classList.remove('hidden');
-            updateStatus(`${selectedIds.length}개의 카메라를 모니터링합니다.`, 'monitoring');
+            if (selectedDeviceIds.length === 0) { 
+                statusText.textContent = '선택된 카메라가 없습니다.'; 
+                return; 
+            }
+            
+            if (debugModeCheckbox.checked) {
+                debugPanel.classList.remove('hidden');
+                debugLogEntries.length = 0;
+                renderDebugLog();
+            }
 
-            for (let i = 0; i < selectedIds.length; i++) {
-                const deviceId = selectedIds[i];
-                const card = document.createElement('div');
-                card.className = 'camera-card rounded-lg p-4 flex flex-col gap-2 w-full';
-                const device = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === deviceId);
-                card.innerHTML = `
-                    <div class="relative w-full video-container">
-                        <video autoplay muted playsinline class="w-full h-auto rounded-md bg-black"></video>
-                        <canvas class="overlay-canvas"></canvas>
-                    </div>
-                    <div class="flex justify-between items-center mt-2 text-xs">
-                        <p class="text-gray-300 font-medium">${device.label || `카메라 ${i + 1}`}</p>
-                        <div class="text-right">
-                            <p class="text-gray-500 size-element">원본: -</p>
-                            <p class="text-gray-400 resize-element">출력: -</p>
-                        </div>
-                    </div>
-                    <div class="mt-1 text-center">
-                        <p class="font-bold text-3xl score-element">연결 중...</p>
-                    </div>`;
-                UIElements.cameraGrid.appendChild(card);
+            openCameraSelectButton.textContent = '모니터링 중지';
+            cameraGrid.innerHTML = '';
+            statusText.textContent = `${selectedDeviceIds.length}개의 카메라를 모니터링합니다.`;
+            statusContainer.classList.remove('text-yellow-400');
+            statusContainer.classList.add('text-green-400');
 
-                const videoContainer = card.querySelector('.video-container');
-                const video = card.querySelector('video');
-                const oCanvas = card.querySelector('canvas');
-                const pCanvas = document.createElement('canvas');
+            for (let i = 0; i < selectedDeviceIds.length; i++) {
+                const deviceId = selectedDeviceIds[i];
+                
+                cameraAnalysisData.set(deviceId, { lastPosition: null });
+
+                const wrapper = document.createElement('div');
+                wrapper.className = 'camera-card rounded-lg p-4 flex flex-col gap-2';
+                
+                const videoContainer = document.createElement('div');
+                videoContainer.className = 'relative w-full aspect-video';
+                
+                const video = document.createElement('video');
+                video.autoplay = true; video.muted = true; video.playsInline = true;
+                video.className = 'w-full h-full rounded-md bg-black';
+                
+                const overlayCanvas = document.createElement('canvas');
+                overlayCanvas.className = 'overlay-canvas';
+                
+                videoContainer.appendChild(video); 
+                videoContainer.appendChild(overlayCanvas);
+                
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'flex justify-between items-center';
+                
+                const label = document.createElement('p');
+                label.className = 'text-sm text-gray-400';
+                
+                const scoreEl = document.createElement('p');
+                scoreEl.className = 'font-bold text-xl';
+                scoreEl.textContent = '연결 중...';
+                
+                infoDiv.appendChild(label); 
+                infoDiv.appendChild(scoreEl);
+                wrapper.appendChild(videoContainer); 
+                wrapper.appendChild(infoDiv);
+                cameraGrid.appendChild(wrapper);
 
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } });
-                    AppState.activeStreams.push(stream);
+                    activeStreams.push(stream);
                     video.srcObject = stream;
-                    video.onloadedmetadata = () => {
-                        const setup = () => {
-                            videoContainer.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-                            card.querySelector('.size-element').textContent = `원본: ${video.videoWidth}x${video.videoHeight}`;
-                            const resizeEl = card.querySelector('.resize-element');
+                    
+                    const device = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === deviceId);
+                    label.textContent = device.label || `카메라 ${i + 1}`;
+                    
+                    const processCanvas = document.createElement('canvas');
+                    processCanvas.className = 'hidden';
+                    wrapper.appendChild(processCanvas);
+                    
+                    const isPrimaryDebugTarget = (i === 0);
 
-                            const ro = new ResizeObserver(entries => {
-                                for (const entry of entries) {
-                                    const { width, height } = entry.contentRect;
-                                    resizeEl.textContent = `출력: ${Math.round(width)}x${Math.round(height)}`;
-                                }
-                            });
-                            ro.observe(videoContainer);
+                    video.onplaying = () => { 
+                        processCanvas.width = video.videoWidth;
+                        processCanvas.height = video.videoHeight;
+                        overlayCanvas.width = video.videoWidth;
+                        overlayCanvas.height = video.videoHeight;
 
-                            [oCanvas, pCanvas].forEach(c => { c.width = video.videoWidth; c.height = video.videoHeight; });
-                            AppState.cameraData.set(deviceId, { resizeObserver: ro, lastPosition: null, lastAlertTime: 0, lastClearFrame: { url: null, score: 0 } });
-                            startAnalysisLoop(video, pCanvas, oCanvas, card, deviceId);
-                            video.removeEventListener('playing', setup);
-                        };
-                        video.addEventListener('playing', setup);
+                        startAnalysisLoop(video, processCanvas, overlayCanvas, scoreEl, deviceId, isPrimaryDebugTarget); 
                     };
-                } catch (err) { console.error(`카메라 ${deviceId} 열기 실패:`, err); card.querySelector('.video-container').innerHTML = `<div class="w-full h-full bg-black rounded-md flex items-center justify-center text-red-500">카메라 열기 실패</div>`; }
+
+                } catch (err) {
+                    console.error(`카메라 ${deviceId} 열기 실패:`, err.name, err.message);
+                    wrapper.classList.add('error');
+                    const errorPlaceholder = document.createElement('div');
+                    errorPlaceholder.className = 'w-full h-full bg-black rounded-md flex items-center justify-center text-center p-4';
+                    errorPlaceholder.innerHTML = `<p class="text-yellow-400">카메라 열기 실패<br><span class="text-sm text-gray-400">${err.name}</span></p>`;
+                    videoContainer.replaceChild(errorPlaceholder, video);
+                    scoreEl.textContent = '오류';
+                }
             }
-            const activeSizeBtn = UIElements.sizeSelector.querySelector('.active');
-            if(activeSizeBtn) applySize(activeSizeBtn.dataset.size);
         }
-        async function openCameraSelectionModal() { stopAllMonitoring(); UIElements.mainActionButton.disabled = true; try { await navigator.mediaDevices.getUserMedia({ video: true }); const devices = await navigator.mediaDevices.enumerateDevices(); const videoDevices = devices.filter(d => d.kind === 'videoinput'); UIElements.cameraListContainer.innerHTML = ''; if (videoDevices.length > 0) { videoDevices.forEach((d, i) => { const l = document.createElement('label'); l.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer'; l.innerHTML = `<input type="checkbox" value="${d.deviceId}" class="h-4 w-4 rounded"><span class="text-gray-300">${d.label || `카메라 ${i + 1}`}</span>`; UIElements.cameraListContainer.appendChild(l); }); } else { UIElements.cameraListContainer.innerHTML = '<p>카메라 없음</p>'; } UIElements.cameraSelectModal.style.display = 'flex'; } catch (err) { updateStatus(`카메라 접근 오류: ${err.message}`, 'error'); } finally { UIElements.mainActionButton.disabled = false; } }
 
-        // --- Initialization ---
         async function initializeApp() {
-            loadSettings();
-            
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusText.textContent = "오류: 이 브라우저에서는 카메라 기능을 지원하지 않습니다.";
+                loadingSpinner.style.display = 'none';
+                openCameraSelectButton.disabled = true; 
+                return;
+            }
+
+            const savedThreshold = localStorage.getItem('focusMonitorThreshold');
+            if (savedThreshold) {
+                const value = parseInt(savedThreshold, 10);
+                thresholdSlider.value = value;
+                thresholdInput.value = value;
+            }
+
             try {
-                await DB.init();
-                await loadSessionList();
-                updateStatus('얼굴 인식 모델 로딩 중...', 'loading');
-                await faceapi.nets.tinyFaceDetector.loadFromUri(CONSTANTS.WEIGHTS_URL);
-                AppState.modelsLoaded = true;
-                updateStatus('모델 로딩 완료!', 'ready');
-                UIElements.mainActionButton.disabled = false;
-            } catch (error) { updateStatus(`초기화 오류: ${error}`, 'error'); console.error(error); }
+                statusText.textContent = "라이브러리 로딩 시도 중...";
+                const { FaceDetector, FilesetResolver } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm");
 
-            // --- Event Listeners ---
-            UIElements.mainActionButton.addEventListener('click', () => { AppState.isMonitoring ? stopAllMonitoring() : openCameraSelectionModal(); });
-            UIElements.modalCancelButton.addEventListener('click', () => UIElements.cameraSelectModal.style.display = 'none');
-            UIElements.modalStartButton.addEventListener('click', startSelectedMonitoring);
-            UIElements.sessionHistorySelect.addEventListener('change', (e) => {
-                const sessionId = e.target.value;
-                if (sessionId) {
-                    DB.getLogsBySession(Number(sessionId)).then(renderLog).catch(console.error);
-                } else {
-                    UIElements.blurLogContainer.innerHTML = '';
-                    UIElements.blurLogPanel.classList.add('hidden');
-                }
-            });
-            UIElements.clearLogButton.addEventListener('click', () => { if(confirm('정말로 모든 기록을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) { DB.clearLogs().then(() => { renderLog([]); loadSessionList(); }).catch(console.error); } });
-            
-            const slider = UIElements.thresholdSlider;
-            const input = UIElements.thresholdInput;
-            slider.addEventListener('input', e => input.value = e.target.value);
-            slider.addEventListener('change', saveSettings);
-            input.addEventListener('change', e => { slider.value = e.target.value; saveSettings(); });
-            
-            UIElements.extractBlurCheckbox.addEventListener('change', () => { 
-                UIElements.debugPanel.classList.toggle('hidden', !UIElements.extractBlurCheckbox.checked); 
-                if (!UIElements.extractBlurCheckbox.checked) {
-                    UIElements.blurLogPanel.classList.add('hidden');
-                }
-                saveSettings(); 
-            });
-            UIElements.muteCheckbox.addEventListener('change', saveSettings);
+                statusText.textContent = "핵심 엔진(WASM) 로딩 중...";
+                const vision = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+                );
+                
+                statusText.textContent = "얼굴 인식 AI 모델 다운로드 중...";
+                faceDetector = await FaceDetector.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite`,
+                        delegate: "GPU"
+                    },
+                    runningMode: "VIDEO"
+                });
 
-            UIElements.sizeSelector.addEventListener('click', e => {
-                if (e.target.classList.contains('size-btn')) {
-                    const size = e.target.dataset.size;
-                    applySize(size);
-                    saveSettings();
-                }
-            });
-            UIElements.customWidthInput.addEventListener('change', () => {
-                const activeBtn = UIElements.sizeSelector.querySelector('.active');
-                if (activeBtn && activeBtn.dataset.size === 'custom') {
-                    applySize('custom');
-                    saveSettings();
-                }
-            });
+                statusText.textContent = '모델 로딩 완료! 모니터링 시작 버튼을 누르세요.';
+                loadingSpinner.style.display = 'none';
+                statusContainer.classList.remove('text-yellow-400');
+                statusContainer.classList.add('text-green-400');
+                openCameraSelectButton.disabled = false;
+            } catch (error) {
+                statusText.textContent = `모델 로딩 실패: ${error.message}`;
+                loadingSpinner.style.display = 'none';
+                console.error("MediaPipe model loading failed:", error);
+            }
         }
+        
+        // --- Event Listeners ---
+        openCameraSelectButton.addEventListener('click', () => {
+             if (Tone.context.state !== 'running') {
+                Tone.start();
+             }
+             if (activeStreams.length > 0) stopAllMonitoring();
+             else openCameraSelectionModal();
+        });
+
+        modalCancelButton.addEventListener('click', () => { cameraSelectModal.style.display = 'none'; });
+        modalStartButton.addEventListener('click', () => {
+            if (Tone.context.state !== 'running') {
+                Tone.start();
+            }
+            startSelectedMonitoring();
+        });
+        
+        thresholdSlider.addEventListener('input', (event) => { 
+            thresholdInput.value = event.target.value;
+            localStorage.setItem('focusMonitorThreshold', event.target.value);
+        });
+        thresholdInput.addEventListener('input', (event) => {
+            let value = parseInt(event.target.value, 10);
+            if (isNaN(value)) return;
+            const min = parseInt(event.target.min, 10);
+            const max = parseInt(event.target.max, 10);
+            if (value < min) value = min;
+            if (value > max) value = max;
+            event.target.value = value;
+            thresholdSlider.value = value;
+            localStorage.setItem('focusMonitorThreshold', value);
+        });
+        
+        debugModeCheckbox.addEventListener('change', () => {
+            const isDebug = debugModeCheckbox.checked;
+            debugPanel.classList.toggle('hidden', !isDebug);
+            if (isDebug && activeStreams.length > 0) {
+                 debugLogEntries.length = 0;
+                 renderDebugLog();
+            }
+        });
+
+        clearLogButton.addEventListener('click', () => {
+            blurLogEntries.length = 0;
+            renderBlurLog();
+        });
+        
+        clearDebugLogButton.addEventListener('click', () => {
+            debugLogEntries.length = 0;
+            renderDebugLog();
+        });
 
         initializeApp();
     </script>
