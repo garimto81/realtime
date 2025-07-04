@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.08 (안정성 강화)</title>
+    <title>실시간 포커스 모니터 Ver 2.09 (다운로드 기능)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -44,7 +44,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.08</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.09</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -95,7 +95,8 @@
                  <select id="session-select" class="w-full p-2 bg-gray-700 rounded-md border-gray-600">
                      <option value="">세션 기록 선택...</option>
                  </select>
-                 <button id="clear-all-logs-button" class="w-full px-3 py-2 bg-red-800 text-white text-sm rounded-md hover:bg-red-700">모든 기록 지우기</button>
+                 <button id="clear-all-logs-button" class="w-full px-3 py-2 bg-red-800 text-white text-sm rounded-md hover:bg-red-700 mt-2">모든 기록 지우기</button>
+                 <button id="download-log-button" class="w-full px-3 py-2 bg-green-700 text-white text-sm rounded-md hover:bg-green-600 mt-2 hidden">세션 로그 다운로드</button>
             </div>
             <div class="control-group space-y-3">
                 <p class="font-bold text-white">기타 설정</p>
@@ -179,8 +180,9 @@
                 // --- State Variables ---
                 this.faceDetector = null;
                 this.db = null;
-                this.isDbAvailable = false; // Flag to check DB availability
+                this.isDbAvailable = false;
                 this.currentSessionId = null;
+                this.sessionLogEntries = []; // In-memory log for the current session
                 this.appState = 'initializing'; // initializing, stopped, monitoring
                 this.activeStreams = [];
                 this.analysisLoops = new Map();
@@ -196,9 +198,6 @@
                 this.initializeApp();
             }
 
-            /**
-             * Binds all necessary DOM elements to the this.dom object.
-             */
             bindDOMElements() {
                 const ids = [
                     'main-action-button', 'status-container', 'status-text', 'loading-spinner',
@@ -211,7 +210,7 @@
                     'blur-log-title', 'blur-log-container', 'clear-log-button', 'debug-panel',
                     'debug-log-container', 'clear-debug-log-button', 'custom-confirm-modal',
                     'confirm-modal-title', 'confirm-modal-body', 'confirm-modal-cancel', 'confirm-modal-ok',
-                    'history-control-group'
+                    'history-control-group', 'download-log-button'
                 ];
                 ids.forEach(id => {
                     this.dom[id.replace(/-(\w)/g, (m, c) => c.toUpperCase())] = document.getElementById(id);
@@ -285,7 +284,7 @@
                 }
             }
 
-            updateStatus(message, type) { // type: 'loading', 'success', 'error', 'idle'
+            updateStatus(message, type) {
                 this.dom.statusText.textContent = message;
                 this.dom.loadingSpinner.style.display = type === 'loading' ? 'block' : 'none';
                 
@@ -293,7 +292,7 @@
                 container.classList.remove('text-yellow-400', 'text-green-400', 'text-red-400');
                 if (type === 'success') container.classList.add('text-green-400');
                 else if (type === 'error') container.classList.add('text-red-400');
-                else container.classList.add('text-yellow-400'); // loading or idle
+                else container.classList.add('text-yellow-400');
             }
 
             // =================================================================
@@ -324,6 +323,7 @@
                 this.dom.clearDebugLogButton.addEventListener('click', () => this.clearDebugLogs());
                 this.dom.clearAllLogsButton.addEventListener('click', () => this.clearAllData());
                 this.dom.sessionSelect.addEventListener('change', (e) => this.handleSessionChange(e));
+                this.dom.downloadLogButton.addEventListener('click', () => this.downloadSessionLog());
                 this.dom.debugLogContainer.addEventListener('scroll', () => {
                     this.userHasScrolledDebug = this.dom.debugLogContainer.scrollTop > 0;
                 });
@@ -353,7 +353,7 @@
                 try {
                     this.addDebugLog('Requesting user media for device enumeration...');
                     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-                    stream.getTracks().forEach(track => track.stop()); // Immediately stop the track after getting permission
+                    stream.getTracks().forEach(track => track.stop());
                     this.addDebugLog('Permission granted. Enumerating devices...');
                     
                     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -467,6 +467,7 @@
                 this.dom.blurLogPanel.classList.add('hidden');
                 this.dom.blurLogContainer.innerHTML = '';
                 this.currentSessionId = null;
+                this.sessionLogEntries = []; // Clear in-memory log
                 this.setAppState('stopped');
                 this.addDebugLog('All monitoring stopped successfully.', 'SUCCESS');
             }
@@ -483,7 +484,7 @@
                 const frameCaptureCanvas = document.createElement('canvas');
 
                 const loop = (currentTime) => {
-                    if (!this.analysisLoops.has(deviceId)) return; // Loop stop flag
+                    if (!this.analysisLoops.has(deviceId)) return;
 
                     try {
                         if (!card.video.srcObject || !card.video.srcObject.active || card.video.paused || card.video.videoWidth === 0) {
@@ -517,7 +518,6 @@
 
                             const score = this.calculateFocusScore(faceImageData);
                             
-                            // Movement detection
                             const currentCenter = { x: box.originX + box.width / 2, y: box.originY + box.height / 2 };
                             let movementDistance = 0;
                             if (analysisData.lastPosition) {
@@ -530,7 +530,6 @@
                             const isStationary = movementDistance < this.MOTION_THRESHOLD;
                             let isScoreLow, isBlurry;
 
-                            // Threshold calculation
                             if (this.dom.autoThresholdCheckbox.checked) {
                                 analysisData.scores.push(score);
                                 if (analysisData.scores.length > 50) analysisData.scores.shift();
@@ -554,7 +553,6 @@
                             
                             isBlurry = isScoreLow && isStationary;
                             
-                            // Handle alert and logging
                             if (isBlurry) {
                                 card.scoreEl.classList.add('text-red-500');
                                 const now = Date.now();
@@ -569,7 +567,6 @@
                                         frameCaptureCanvas.height = card.video.videoHeight;
                                         const frameCtx = frameCaptureCanvas.getContext('2d');
                                         frameCtx.drawImage(card.video, 0, 0);
-                                        // Draw all detected boxes on the captured frame
                                         detections.forEach((d, i) => {
                                             const b = d.boundingBox;
                                             if(b) {
@@ -588,9 +585,6 @@
                                             blurryScore: score
                                         };
                                         this.saveBlurLog(logEntry);
-                                        if (String(this.dom.sessionSelect.value) === String(this.currentSessionId)) {
-                                            this.getLogsForSession(this.currentSessionId).then(logs => this.renderBlurLog(logs));
-                                        }
                                     }
                                 }
                             } else {
@@ -600,12 +594,11 @@
                                     alertState.active = false;
                                 }
                                 
-                                if (!isScoreLow) { // Capture the last clear frame
+                                if (!isScoreLow) {
                                     frameCaptureCanvas.width = card.video.videoWidth;
                                     frameCaptureCanvas.height = card.video.videoHeight;
                                     const frameCtx = frameCaptureCanvas.getContext('2d');
                                     frameCtx.drawImage(card.video, 0, 0);
-                                     // Draw all detected boxes on the captured frame
                                     detections.forEach((d, i) => {
                                         const b = d.boundingBox;
                                         if(b) {
@@ -619,7 +612,6 @@
                                 }
                             }
 
-                            // Draw bounding boxes on live overlay
                             detections.forEach((detection, index) => {
                                 const currentBox = detection.boundingBox;
                                 if (!currentBox) return;
@@ -732,7 +724,6 @@
             }
             
             renderBlurLog(logEntries) {
-                if (!this.isDbAvailable) return;
                 this.dom.blurLogContainer.innerHTML = '';
                 this.dom.blurLogPanel.classList.toggle('hidden', logEntries.length === 0);
 
@@ -778,7 +769,7 @@
             toggleModal(modalId, show) {
                 const modal = this.dom[modalId.replace(/-(\w)/g, (m, c) => c.toUpperCase())];
                 if (modal) {
-                    modal.style.display = show ? (modalId === 'customConfirmModal' ? 'flex' : 'flex') : 'none';
+                    modal.style.display = show ? 'flex' : 'none';
                 }
             }
             
@@ -786,7 +777,6 @@
                 this.dom.confirmModalTitle.textContent = title;
                 this.dom.confirmModalBody.textContent = body;
                 
-                // Clone and replace the OK button to remove old event listeners
                 const oldOkButton = this.dom.confirmModalOk;
                 const newOkButton = oldOkButton.cloneNode(true);
                 oldOkButton.parentNode.replaceChild(newOkButton, oldOkButton);
@@ -881,12 +871,10 @@
                         this.addDebugLog(`Upgrading DB to version ${this.DB_VERSION}...`, 'WARN');
                         if (!db.objectStoreNames.contains(this.SESSION_STORE_NAME)) {
                             db.createObjectStore(this.SESSION_STORE_NAME, { keyPath: 'id' });
-                            this.addDebugLog(`Object store '${this.SESSION_STORE_NAME}' created.`, 'SUCCESS');
                         }
                         if (!db.objectStoreNames.contains(this.LOG_STORE_NAME)) {
                             const logStore = db.createObjectStore(this.LOG_STORE_NAME, { autoIncrement: true });
                             logStore.createIndex('sessionId', 'sessionId', { unique: false });
-                            this.addDebugLog(`Object store '${this.LOG_STORE_NAME}' created.`, 'SUCCESS');
                         }
                     },
                 });
@@ -894,35 +882,44 @@
             }
 
             disableLoggingFeatures() {
-                this.dom.sessionSelect.disabled = true;
-                this.dom.clearAllLogsButton.disabled = true;
-                this.dom.clearLogButton.disabled = true;
+                this.dom.sessionSelect.classList.add('hidden');
+                this.dom.clearAllLogsButton.classList.add('hidden');
+                this.dom.downloadLogButton.classList.remove('hidden');
                 
                 const historyGroup = this.dom.historyControlGroup;
-                historyGroup.querySelector('p').textContent = '기록 관리 (비활성화됨)';
+                historyGroup.querySelector('p').textContent = '기록 관리 (저장소 비활성)';
                 
-                // Prevent adding duplicate messages
                 if (!historyGroup.querySelector('.db-error-message')) {
                     const message = document.createElement('p');
                     message.className = 'text-xs text-yellow-400 mt-1 db-error-message';
-                    message.textContent = '브라우저 설정으로 인해 기록 기능을 사용할 수 없습니다.';
+                    message.textContent = '로그는 현재 세션에서만 유지되며 다운로드 가능합니다.';
                     historyGroup.appendChild(message);
                 }
             }
 
             async createSession() {
+                this.sessionLogEntries = []; // Clear previous in-memory log
                 if (!this.isDbAvailable) return;
+                
                 this.currentSessionId = Date.now();
                 await this.db.add(this.SESSION_STORE_NAME, { id: this.currentSessionId, startTime: new Date().toLocaleString() });
                 await this.loadSessions();
                 this.dom.sessionSelect.value = this.currentSessionId;
-                return this.currentSessionId;
             }
 
             async saveBlurLog(logEntry) {
+                // Always save to in-memory for current session view
+                this.sessionLogEntries.push(logEntry);
+                this.renderBlurLog(this.sessionLogEntries);
+
+                // Try to save to IndexedDB if available
                 if (!this.isDbAvailable || !this.currentSessionId) return;
-                logEntry.sessionId = this.currentSessionId;
-                await this.db.add(this.LOG_STORE_NAME, logEntry);
+                try {
+                    logEntry.sessionId = this.currentSessionId;
+                    await this.db.add(this.LOG_STORE_NAME, logEntry);
+                } catch (error) {
+                    this.addDebugLog('Failed to save log to DB.', 'ERROR', error);
+                }
             }
 
             async getLogsForSession(sessionId) {
@@ -956,20 +953,22 @@
             }
             
             async clearCurrentSessionLogs() {
-                if (!this.isDbAvailable) return;
-                const selectedSessionId = this.dom.sessionSelect.value;
-                if (!selectedSessionId) return;
+                if (this.isDbAvailable) {
+                    const selectedSessionId = this.dom.sessionSelect.value;
+                    if (!selectedSessionId) return;
 
-                const tx = this.db.transaction(this.LOG_STORE_NAME, 'readwrite');
-                const index = tx.store.index('sessionId');
-                let cursor = await index.openCursor(IDBKeyRange.only(Number(selectedSessionId)));
-                while (cursor) {
-                    cursor.delete();
-                    cursor = await cursor.continue();
+                    const tx = this.db.transaction(this.LOG_STORE_NAME, 'readwrite');
+                    const index = tx.store.index('sessionId');
+                    let cursor = await index.openCursor(IDBKeyRange.only(Number(selectedSessionId)));
+                    while (cursor) {
+                        cursor.delete();
+                        cursor = await cursor.continue();
+                    }
+                    await tx.done;
+                    this.addDebugLog(`Logs for session ${selectedSessionId} cleared.`, 'WARN');
                 }
-                await tx.done;
+                this.sessionLogEntries = [];
                 this.renderBlurLog([]);
-                this.addDebugLog(`Logs for session ${selectedSessionId} cleared.`, 'WARN');
             }
 
             clearAllData() {
@@ -988,6 +987,30 @@
                         this.addDebugLog('All data has been cleared.', 'WARN');
                     }
                 );
+            }
+            
+            downloadSessionLog() {
+                if (this.sessionLogEntries.length === 0) {
+                    alert('다운로드할 로그가 없습니다.');
+                    return;
+                }
+                // We stringify a subset of data to avoid huge file sizes from data URLs
+                const simplifiedLogs = this.sessionLogEntries.map(log => ({
+                    timestamp: log.timestamp,
+                    clearScore: log.clearScore,
+                    blurryScore: log.blurryScore
+                }));
+                const logData = JSON.stringify(simplifiedLogs, null, 2);
+                const blob = new Blob([logData], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `focus_log_${new Date().toISOString()}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.addDebugLog('Session log downloaded.');
             }
 
             addDebugLog(message, level = 'INFO', data = null) {
