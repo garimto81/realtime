@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.07 (개선안)</title>
+    <title>실시간 포커스 모니터 Ver 2.08 (안정성 강화)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -44,7 +44,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.07</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.08</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -90,7 +90,7 @@
                 </div>
                 <input type="number" id="custom-size-input" placeholder="너비(px)" class="w-full p-2 bg-gray-700 rounded-md border-gray-600" disabled>
             </div>
-            <div class="control-group space-y-3">
+            <div class="control-group space-y-3" id="history-control-group">
                  <p class="font-bold text-white">기록 관리</p>
                  <select id="session-select" class="w-full p-2 bg-gray-700 rounded-md border-gray-600">
                      <option value="">세션 기록 선택...</option>
@@ -179,6 +179,7 @@
                 // --- State Variables ---
                 this.faceDetector = null;
                 this.db = null;
+                this.isDbAvailable = false; // Flag to check DB availability
                 this.currentSessionId = null;
                 this.appState = 'initializing'; // initializing, stopped, monitoring
                 this.activeStreams = [];
@@ -209,7 +210,8 @@
                     'modal-cancel-button', 'modal-start-button', 'blur-log-panel',
                     'blur-log-title', 'blur-log-container', 'clear-log-button', 'debug-panel',
                     'debug-log-container', 'clear-debug-log-button', 'custom-confirm-modal',
-                    'confirm-modal-title', 'confirm-modal-body', 'confirm-modal-cancel', 'confirm-modal-ok'
+                    'confirm-modal-title', 'confirm-modal-body', 'confirm-modal-cancel', 'confirm-modal-ok',
+                    'history-control-group'
                 ];
                 ids.forEach(id => {
                     this.dom[id.replace(/-(\w)/g, (m, c) => c.toUpperCase())] = document.getElementById(id);
@@ -236,8 +238,11 @@
                 try {
                     await this.initDB();
                     await this.loadSessions();
+                    this.isDbAvailable = true;
                 } catch (error) {
-                    this.addDebugLog('Failed to initialize IndexedDB.', 'ERROR', error);
+                    this.isDbAvailable = false;
+                    this.addDebugLog('Failed to initialize IndexedDB. Logging will be disabled.', 'ERROR', error);
+                    this.disableLoggingFeatures();
                 }
 
                 try {
@@ -439,21 +444,23 @@
             }
 
             stopAllMonitoring() {
-                if(this.appState !== 'monitoring') return;
+                if (this.appState !== 'monitoring') return;
 
                 this.addDebugLog('Stopping all monitoring...', 'WARN');
                 this.activeStreams.forEach(stream => {
-                    stream.getTracks().forEach(track => track.stop());
-                    this.addDebugLog(`Stream track stopped: ${track.label}`, 'INFO');
+                    stream.getTracks().forEach(track => {
+                        track.stop();
+                        this.addDebugLog(`Stream track stopped: ${track.label}`, 'INFO');
+                    });
                 });
                 this.activeStreams = [];
-                
+
                 this.analysisLoops.forEach((loopId, id) => {
                     cancelAnimationFrame(loopId);
                     this.addDebugLog(`Analysis loop canceled for device: ${id}`, 'INFO');
                 });
                 this.analysisLoops.clear();
-                
+
                 this.cameraAnalysisData.clear();
                 this.dom.cameraGrid.innerHTML = '';
                 this.dom.debugPanel.classList.add('hidden');
@@ -725,6 +732,7 @@
             }
             
             renderBlurLog(logEntries) {
+                if (!this.isDbAvailable) return;
                 this.dom.blurLogContainer.innerHTML = '';
                 this.dom.blurLogPanel.classList.toggle('hidden', logEntries.length === 0);
 
@@ -866,8 +874,7 @@
             async initDB() {
                 this.addDebugLog('Initializing IndexedDB...');
                 if (!window.idb) {
-                    this.addDebugLog('IndexedDB library (idb) is not loaded.', 'ERROR');
-                    return;
+                    throw new Error('IndexedDB library (idb) is not loaded.');
                 }
                 this.db = await idb.openDB(this.DB_NAME, this.DB_VERSION, {
                     upgrade: (db) => {
@@ -886,8 +893,25 @@
                 this.addDebugLog('IndexedDB initialized successfully.', 'SUCCESS');
             }
 
+            disableLoggingFeatures() {
+                this.dom.sessionSelect.disabled = true;
+                this.dom.clearAllLogsButton.disabled = true;
+                this.dom.clearLogButton.disabled = true;
+                
+                const historyGroup = this.dom.historyControlGroup;
+                historyGroup.querySelector('p').textContent = '기록 관리 (비활성화됨)';
+                
+                // Prevent adding duplicate messages
+                if (!historyGroup.querySelector('.db-error-message')) {
+                    const message = document.createElement('p');
+                    message.className = 'text-xs text-yellow-400 mt-1 db-error-message';
+                    message.textContent = '브라우저 설정으로 인해 기록 기능을 사용할 수 없습니다.';
+                    historyGroup.appendChild(message);
+                }
+            }
+
             async createSession() {
-                if (!this.db) return;
+                if (!this.isDbAvailable) return;
                 this.currentSessionId = Date.now();
                 await this.db.add(this.SESSION_STORE_NAME, { id: this.currentSessionId, startTime: new Date().toLocaleString() });
                 await this.loadSessions();
@@ -896,18 +920,18 @@
             }
 
             async saveBlurLog(logEntry) {
-                if (!this.db || !this.currentSessionId) return;
+                if (!this.isDbAvailable || !this.currentSessionId) return;
                 logEntry.sessionId = this.currentSessionId;
                 await this.db.add(this.LOG_STORE_NAME, logEntry);
             }
 
             async getLogsForSession(sessionId) {
-                if (!this.db) return [];
+                if (!this.isDbAvailable) return [];
                 return await this.db.getAllFromIndex(this.LOG_STORE_NAME, 'sessionId', Number(sessionId));
             }
 
             async loadSessions() {
-                if (!this.db) return;
+                if (!this.isDbAvailable) return;
                 const sessions = await this.db.getAll(this.SESSION_STORE_NAME);
                 const select = this.dom.sessionSelect;
                 select.innerHTML = '<option value="">세션 기록 선택...</option>';
@@ -918,6 +942,7 @@
             }
             
             async handleSessionChange(e) {
+                if (!this.isDbAvailable) return;
                 const sessionId = e.target.value;
                 if (sessionId) {
                     const sessionText = e.target.options[e.target.selectedIndex].text;
@@ -931,6 +956,7 @@
             }
             
             async clearCurrentSessionLogs() {
+                if (!this.isDbAvailable) return;
                 const selectedSessionId = this.dom.sessionSelect.value;
                 if (!selectedSessionId) return;
 
@@ -947,11 +973,12 @@
             }
 
             clearAllData() {
+                if (!this.isDbAvailable) return;
                 this.showConfirmModal(
                     '모든 기록 삭제',
                     '정말로 모든 세션과 로그 기록을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
                     async () => {
-                         if (!this.db) return;
+                        if (!this.db) return;
                         const tx = this.db.transaction([this.SESSION_STORE_NAME, this.LOG_STORE_NAME], 'readwrite');
                         await tx.objectStore(this.SESSION_STORE_NAME).clear();
                         await tx.objectStore(this.LOG_STORE_NAME).clear();
