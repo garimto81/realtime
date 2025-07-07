@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.10 (오류 진단 강화)</title>
+    <title>실시간 포커스 모니터 Ver 2.11 (DB 오류 수정)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -44,7 +44,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.10</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.11</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -172,7 +172,8 @@
                 this.ALERT_COOLDOWN = 1000;
                 this.MAX_DEBUG_LOGS = 100;
                 this.DB_NAME = 'FocusMonitorDB';
-                this.DB_VERSION = 1;
+                // DB_VERSION: Increment this only when the DB schema (object stores, indexes) changes.
+                this.DB_VERSION = 2;
                 this.LOG_STORE_NAME = 'blurLogs';
                 this.SESSION_STORE_NAME = 'sessions';
                 this.SETTINGS_KEY = 'focusMonitorSettings';
@@ -240,11 +241,9 @@
                     this.isDbAvailable = true;
                 } catch (error) {
                     this.isDbAvailable = false;
-                    // 진단용 로그 강화: 에러의 이름과 메시지를 명확히 기록
                     const errorDetails = {
                         name: error.name,
                         message: error.message,
-                        stack: error.stack
                     };
                     this.addDebugLog('Failed to initialize IndexedDB. Logging will be disabled.', 'ERROR', errorDetails);
                     this.disableLoggingFeatures();
@@ -404,6 +403,7 @@
                 await this.createSession();
                 this.setAppState('monitoring');
                 this.updateStatus(`${selectedDeviceIds.length}개의 카메라를 모니터링합니다.`, 'success');
+                this.dom.blurLogTitle.textContent = '흐림 감지 로그 (현재 세션)';
                 this.dom.debugPanel.classList.toggle('hidden', !this.dom.debugModeCheckbox.checked);
                 this.dom.cameraGrid.innerHTML = '';
 
@@ -1082,4 +1082,4 @@
         });
     </script>
 </body>
-</html>
+</ht
