@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.26 (자동 재시작)</title>
+    <title>실시간 포커스 모니터 Ver 2.27 (UI/로직 개선)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.26</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.27</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -40,7 +40,7 @@
         </header>
 
         <!-- Controls Panel -->
-        <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div class="control-group space-y-3">
                 <p class="font-bold text-white">초점 기준</p>
                 <div class="flex items-center gap-2">
@@ -62,17 +62,6 @@
                         <span class="text-lg">%</span>
                     </div>
                 </div>
-            </div>
-            <div class="control-group space-y-3">
-                <p class="font-bold text-white">출력 크기</p>
-                <div class="flex flex-wrap gap-x-4 gap-y-2">
-                    <div class="flex items-center"><input type="radio" id="size-auto" name="output-size" value="auto" class="h-4 w-4" checked><label for="size-auto" class="ml-2">자동</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-480" name="output-size" value="480" class="h-4 w-4"><label for="size-480" class="ml-2">480p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-720" name="output-size" value="720" class="h-4 w-4"><label for="size-720" class="ml-2">720p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-1080" name="output-size" value="1080" class="h-4 w-4"><label for="size-1080" class="ml-2">1080p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-custom" name="output-size" value="custom" class="h-4 w-4"><label for="size-custom" class="ml-2">너비 지정:</label></div>
-                </div>
-                <input type="number" id="custom-size-input" placeholder="최대 너비(px)" class="w-full p-2 bg-gray-700 rounded-md border-gray-600" disabled>
             </div>
             <div class="control-group space-y-3" id="history-control-group">
                  <p class="font-bold text-white">기록 관리</p>
@@ -116,9 +105,23 @@
     
     <div id="camera-select-modal" class="custom-modal-backdrop">
         <div class="custom-modal-content">
-            <h3 class="text-lg font-bold mb-4 text-white">모니터링할 카메라 선택</h3>
-            <div id="camera-list" class="space-y-2 max-h-64 overflow-y-auto pr-2 mb-6"></div>
-            <div class="flex justify-end gap-4">
+            <h3 class="text-lg font-bold mb-4 text-white">모니터링 설정</h3>
+            <div class="control-group space-y-3 mb-6">
+                <p class="font-bold text-white">1. 출력 크기 선택</p>
+                <div id="modal-output-size-controls" class="flex flex-wrap gap-x-4 gap-y-2">
+                    <div class="flex items-center"><input type="radio" id="size-auto" name="output-size" value="auto" class="h-4 w-4" checked><label for="size-auto" class="ml-2">자동</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-480" name="output-size" value="480" class="h-4 w-4"><label for="size-480" class="ml-2">480p</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-720" name="output-size" value="720" class="h-4 w-4"><label for="size-720" class="ml-2">720p</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-1080" name="output-size" value="1080" class="h-4 w-4"><label for="size-1080" class="ml-2">1080p</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-custom" name="output-size" value="custom" class="h-4 w-4"><label for="size-custom" class="ml-2">너비 지정:</label></div>
+                </div>
+                <input type="number" id="custom-size-input" placeholder="최대 너비(px)" class="w-full p-2 bg-gray-700 rounded-md border-gray-600" disabled>
+            </div>
+            <div class="control-group space-y-3">
+                <p class="font-bold text-white">2. 카메라 및 해상도 선택</p>
+                <div id="camera-list" class="space-y-2 max-h-48 overflow-y-auto pr-2"></div>
+            </div>
+            <div class="flex justify-end gap-4 mt-6">
                 <button id="modal-cancel-button" class="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500">취소</button>
                 <button id="modal-start-button" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">선택 완료</button>
             </div>
@@ -223,7 +226,8 @@
                     'debug-log-container', 'clear-debug-log-button', 'custom-confirm-modal',
                     'confirm-modal-title', 'confirm-modal-body', 'confirm-modal-cancel', 'confirm-modal-ok',
                     'history-control-group', 'download-log-button',
-                    'image-lightbox-modal', 'lightbox-close-button', 'lightbox-image'
+                    'image-lightbox-modal', 'lightbox-close-button', 'lightbox-image',
+                    'modal-output-size-controls'
                 ];
                 ids.forEach(id => {
                     const camelCaseId = id.replace(/-(\w)/g, (_, c) => c.toUpperCase());
@@ -460,8 +464,12 @@
                 
                 const settingsToSave = ['thresholdSlider', 'thresholdInput', 'sensitivitySlider', 'sensitivityInput', 'autoThresholdCheckbox', 'muteCheckbox', 'debugModeCheckbox'];
                 settingsToSave.forEach(id => this.ui.dom[id].addEventListener('change', () => this.saveSettings()));
-                this.ui.dom.sizeRadios.forEach(radio => radio.addEventListener('change', () => this.applyOutputSize()));
-                this.ui.dom.customSizeInput.addEventListener('input', () => this.applyOutputSize());
+                
+                this.ui.dom.modalOutputSizeControls.addEventListener('change', (e) => {
+                    if (e.target.name === 'output-size') {
+                        this.ui.dom.customSizeInput.disabled = e.target.value !== 'custom';
+                    }
+                });
 
                 this.ui.dom.clearLogButton.addEventListener('click', () => this.clearCurrentSessionLogs());
                 this.ui.dom.clearDebugLogButton.addEventListener('click', () => this.clearDebugLogs());
@@ -524,6 +532,7 @@
                 this.ui.dom.debugPanel.classList.toggle('hidden', !this.ui.dom.debugModeCheckbox.checked);
                 this.ui.dom.cameraGrid.innerHTML = '';
                 devicesToMonitor.forEach((device, index) => this.setupCamera(device, index === 0));
+                this.applyOutputSize();
             }
             
             async setupCamera(device, isPrimary) {
@@ -618,7 +627,7 @@
                             }
                             
                             const isBlurry = isScoreLow && !analysisData.wasScoreLow && isStationary;
-                            analysisData.wasScoreLow = isScoreLow; // Update state for next frame
+                            analysisData.wasScoreLow = isScoreLow;
 
                             card.scoreEl.classList.toggle('text-red-500', isScoreLow);
                             
@@ -737,8 +746,6 @@
                     autoThreshold: this.ui.dom.autoThresholdCheckbox.checked,
                     threshold: this.ui.dom.thresholdInput.value,
                     sensitivity: this.ui.dom.sensitivityInput.value,
-                    outputSize: document.querySelector('input[name="output-size"]:checked').value,
-                    customSize: this.ui.dom.customSizeInput.value,
                     mute: this.ui.dom.muteCheckbox.checked,
                     debug: this.ui.dom.debugModeCheckbox.checked,
                 };
@@ -754,18 +761,13 @@
                 this.ui.dom.sensitivitySlider.value = settings.sensitivity ?? 75;
                 this.ui.dom.muteCheckbox.checked = settings.mute ?? false;
                 this.ui.dom.debugModeCheckbox.checked = settings.debug ?? true;
-                const sizeRadio = Array.from(this.ui.dom.sizeRadios).find(r => r.value === (settings.outputSize || 'auto'));
-                if (sizeRadio) sizeRadio.checked = true;
-                this.ui.dom.customSizeInput.value = settings.customSize || '';
-                this.applyOutputSize();
                 this.ui.dom.debugPanel.classList.toggle('hidden', !this.ui.dom.debugModeCheckbox.checked);
             }
 
             applyOutputSize() {
-                const selectedSize = document.querySelector('input[name="output-size"]:checked').value;
+                const selectedSize = this.ui.dom.modalOutputSizeControls.querySelector('input:checked').value;
                 const customSize = this.ui.dom.customSizeInput.value;
                 this.addDebugLog(`Applying output size. Selected: ${selectedSize}, Custom: ${customSize || 'N/A'}`);
-                this.ui.dom.customSizeInput.disabled = selectedSize !== 'custom';
                 
                 const sizeMap = { '480': '480px', '720': '720px', '1080': '1080px' };
                 const maxHeight = sizeMap[selectedSize] || 'none';
@@ -779,7 +781,6 @@
                         videoContainer.style.maxHeight = maxHeight;
                     }
                 });
-                this.saveSettings();
                 this.addDebugLog(`Output size styles applied.`);
             }
 
@@ -797,7 +798,7 @@
                 if (this.isDbAvailable && this.currentSessionId) {
                     try {
                         const newId = await this.dbManager.add('blurLogs', { ...newEntry, sessionId: this.currentSessionId });
-                        newEntry.id = newId; // Add db id for later deletion
+                        newEntry.id = newId;
                     } catch (error) {
                         this.addDebugLog('Failed to save log to DB.', 'ERROR', error);
                     }
