@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.20 (최종 안정화)</title>
+    <title>실시간 포커스 모니터 Ver 2.21 (해상도 선택)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -20,7 +20,7 @@
         .control-group { background-color: #374151; padding: 0.75rem; border-radius: 0.5rem; }
         .control-group label { font-weight: 500; }
         .custom-modal-backdrop { display: none; position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.75); z-index: 50; align-items: center; justify-content: center; }
-        .custom-modal-content { background-color: #1f2937; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); width: 90%; max-width: 400px; }
+        .custom-modal-content { background-color: #1f2937; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); width: 90%; max-width: 500px; }
     </style>
 </head>
 <body class="antialiased">
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.20</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.21</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -39,6 +39,7 @@
             </p>
         </header>
 
+        <!-- Controls Panel -->
         <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="control-group space-y-3">
                 <p class="font-bold text-white">초점 기준</p>
@@ -273,6 +274,31 @@
                 }
             }
             
+            populateCameraList(devices) {
+                this.dom.cameraList.innerHTML = '';
+                if (devices.length === 0) {
+                    this.dom.cameraList.innerHTML = '<p class="text-gray-400">사용 가능한 카메라가 없습니다.</p>';
+                    return;
+                }
+                devices.forEach((device, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center justify-between p-2 rounded-md hover:bg-gray-700';
+                    item.innerHTML = `
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" data-device-id="${device.deviceId}" class="h-4 w-4 rounded">
+                            <span class="text-gray-300">${device.label || `카메라 ${index + 1}`}</span>
+                        </label>
+                        <select data-res-for="${device.deviceId}" class="bg-gray-600 rounded-md p-1 text-xs text-white">
+                            <option value="default">기본값</option>
+                            <option value="640x480">640x480</option>
+                            <option value="1280x720">1280x720 (HD)</option>
+                            <option value="1920x1080">1920x1080 (FHD)</option>
+                        </select>
+                    `;
+                    this.dom.cameraList.appendChild(item);
+                });
+            }
+
             createCameraCard() {
                 const card = {};
                 card.wrapper = document.createElement('div');
@@ -287,11 +313,8 @@
                 const infoDiv = document.createElement('div');
                 infoDiv.className = 'absolute top-0 left-0 w-full p-2 text-xs text-white bg-black bg-opacity-50 flex justify-between items-center flex-wrap gap-x-4';
                 card.nameEl = document.createElement('span');
-                const resolutionContainer = document.createElement('div');
                 card.originalResolutionEl = document.createElement('span');
-                card.currentResolutionEl = document.createElement('span');
-                resolutionContainer.append(card.originalResolutionEl, card.currentResolutionEl);
-                infoDiv.append(card.nameEl, resolutionContainer);
+                infoDiv.append(card.nameEl, card.originalResolutionEl);
                 card.scoreEl = document.createElement('p');
                 card.scoreEl.className = 'absolute bottom-2 left-1/2 -translate-x-1/2 font-bold text-2xl text-white bg-black bg-opacity-50 px-2 rounded';
                 card.processCanvas = document.createElement('canvas');
@@ -454,17 +477,7 @@
                     stream.getTracks().forEach(track => track.stop());
                     const devices = await navigator.mediaDevices.enumerateDevices();
                     const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                    this.ui.dom.cameraList.innerHTML = '';
-                    if (videoDevices.length === 0) {
-                        this.ui.dom.cameraList.innerHTML = '<p class="text-gray-400">사용 가능한 카메라가 없습니다.</p>';
-                    } else {
-                        videoDevices.forEach((device, index) => {
-                            const label = document.createElement('label');
-                            label.className = 'flex items-center gap-3 p-2 rounded-md hover:bg-gray-700 cursor-pointer';
-                            label.innerHTML = `<input type="checkbox" value="${device.deviceId}" class="h-4 w-4 rounded"><span class="text-gray-300">${device.label || `카메라 ${index + 1}`}</span>`;
-                            this.ui.dom.cameraList.appendChild(label);
-                        });
-                    }
+                    this.ui.populateCameraList(videoDevices);
                     this.ui.toggleModal('cameraSelectModal', true);
                 } catch (err) {
                     this.ui.updateStatus(`카메라 접근 오류: ${err.message}`, 'error');
@@ -475,33 +488,49 @@
 
             async startSelectedMonitoring() {
                 this.ui.toggleModal('cameraSelectModal', false);
-                const selectedCheckboxes = this.ui.dom.cameraList.querySelectorAll('input:checked');
+                const selectedCheckboxes = Array.from(this.ui.dom.cameraList.querySelectorAll('input:checked'));
                 if (selectedCheckboxes.length === 0) {
                     this.ui.updateStatus('선택된 카메라가 없습니다.', 'idle');
                     return;
                 }
+
+                const devicesToMonitor = selectedCheckboxes.map(cb => {
+                    const deviceId = cb.dataset.deviceId;
+                    const resSelect = this.ui.dom.cameraList.querySelector(`select[data-res-for="${deviceId}"]`);
+                    return { deviceId, resolution: resSelect.value };
+                });
+
                 await this.createSession();
                 this.setAppState('monitoring');
-                this.ui.updateStatus(`${selectedCheckboxes.length}개의 카메라를 모니터링합니다.`, 'success');
+                this.ui.updateStatus(`${devicesToMonitor.length}개의 카메라를 모니터링합니다.`, 'success');
                 this.ui.dom.blurLogTitle.textContent = '흐림 감지 로그 (현재 세션)';
                 this.ui.dom.debugPanel.classList.toggle('hidden', !this.ui.dom.debugModeCheckbox.checked);
                 this.ui.dom.cameraGrid.innerHTML = '';
-                selectedCheckboxes.forEach((cb, index) => this.setupCamera(cb.value, index === 0));
+                devicesToMonitor.forEach((device, index) => this.setupCamera(device, index === 0));
             }
             
-            async setupCamera(deviceId, isPrimary) {
-                this.cameraAnalysisData.set(deviceId, { scores: [], average: 0, lastPosition: null });
+            async setupCamera(device, isPrimary) {
+                this.cameraAnalysisData.set(device.deviceId, { scores: [], average: 0, lastPosition: null });
                 const card = this.ui.createCameraCard();
                 this.ui.dom.cameraGrid.appendChild(card.wrapper);
+
+                const constraints = { video: { deviceId: { exact: device.deviceId } } };
+                if (device.resolution !== 'default') {
+                    const [width, height] = device.resolution.split('x').map(Number);
+                    constraints.video.width = { ideal: width };
+                    constraints.video.height = { ideal: height };
+                }
+                this.addDebugLog('Requesting camera with constraints', 'INFO', constraints);
+
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId } } });
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
                     this.activeStreams.push(stream);
                     card.video.srcObject = stream;
-                    const device = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === deviceId);
-                    card.nameEl.textContent = device.label || `카메라 ${this.activeStreams.length}`;
-                    card.video.onplaying = () => this.onMediaPlaying(card, deviceId, isPrimary);
+                    const deviceInfo = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === device.deviceId);
+                    card.nameEl.textContent = deviceInfo.label || `카메라 ${this.activeStreams.length}`;
+                    card.video.onplaying = () => this.onMediaPlaying(card, device.deviceId, isPrimary);
                 } catch (err) {
-                    this.addDebugLog(`Failed to get stream for ${deviceId}`, 'ERROR', err);
+                    this.addDebugLog(`Failed to get stream for ${device.deviceId}`, 'ERROR', err);
                     card.wrapper.innerHTML = `<div class="w-full h-full bg-black rounded-md flex items-center justify-center p-4"><p class="text-yellow-400 text-center">카메라 열기 실패<br><span class="text-sm text-gray-400">${err.name}</span></p></div>`;
                 }
             }
@@ -511,14 +540,6 @@
                 Object.assign(card.processCanvas, { width: card.video.videoWidth, height: card.video.videoHeight });
                 Object.assign(card.overlayCanvas, { width: card.video.videoWidth, height: card.video.videoHeight });
                 card.originalResolutionEl.textContent = `원본: ${card.video.videoWidth}x${card.video.videoHeight}`;
-                const resizeObserver = new ResizeObserver(entries => {
-                    for (let entry of entries) {
-                        const { width, height } = entry.contentRect;
-                        card.currentResolutionEl.textContent = ` / 현재: ${Math.round(width)}x${Math.round(height)}`;
-                    }
-                });
-                resizeObserver.observe(card.video);
-                card.resizeObserver = resizeObserver;
                 this.startAnalysisLoop(card, deviceId, isPrimary);
             }
 
@@ -529,10 +550,6 @@
                 this.analysisLoops.forEach(id => cancelAnimationFrame(id));
                 this.analysisLoops.clear();
                 this.cameraAnalysisData.clear();
-                this.ui.dom.cameraGrid.querySelectorAll('.camera-card').forEach(cardEl => {
-                    const videoEl = cardEl.querySelector('video');
-                    if (videoEl?.resizeObserver) videoEl.resizeObserver.disconnect();
-                });
                 this.ui.dom.cameraGrid.innerHTML = '';
                 this.ui.dom.blurLogPanel.classList.add('hidden');
                 this.currentSessionId = null;
@@ -710,16 +727,18 @@
             applyOutputSize() {
                 const selectedSize = document.querySelector('input[name="output-size"]:checked').value;
                 const customSize = this.ui.dom.customSizeInput.value;
+                this.addDebugLog(`Applying output size. Selected: ${selectedSize}, Custom: ${customSize || 'N/A'}`);
                 this.ui.dom.customSizeInput.disabled = selectedSize !== 'custom';
                 const sizeMap = { '480': '480px', '720': '720px', '1080': '1080px' };
                 const maxHeight = sizeMap[selectedSize] || 'none';
                 const maxWidth = selectedSize === 'custom' ? (customSize ? `${customSize}px` : 'none') : 'none';
+                this.addDebugLog(`Calculated styles - maxWidth: ${maxWidth}, maxHeight: ${maxHeight}`);
                 document.querySelectorAll('.camera-card').forEach(card => {
-                    const videoContainer = card.querySelector('.relative');
                     card.style.maxWidth = maxWidth;
-                    if (videoContainer) videoContainer.style.maxHeight = maxHeight;
+                    card.style.maxHeight = maxHeight;
                 });
                 this.saveSettings();
+                this.addDebugLog(`Output size styles applied.`);
             }
 
             async createSession() {
