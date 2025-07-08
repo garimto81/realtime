@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.23 (로그 삭제 기능)</title>
+    <title>실시간 포커스 모니터 Ver 2.24 (흐림 감지 로직 수정)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.23</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.24</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -616,6 +616,7 @@
                             }
                             const isBlurry = isScoreLow && isStationary;
                             card.scoreEl.classList.toggle('text-red-500', isBlurry);
+                            
                             if (isBlurry) {
                                 if (!alertState.active && (performance.now() - alertState.lastAlertTime > 1000)) {
                                     alertState = { active: true, lastAlertTime: performance.now() };
@@ -626,12 +627,15 @@
                             } else {
                                 if (alertState.active) card.wrapper.classList.remove('alert');
                                 alertState.active = false;
-                                if (!isScoreLow) lastClearFrame = {
-                                    fullFrameUrl: this.captureFrame(card.video, detections, frameCaptureCanvas, mainFace),
-                                    croppedFaceUrl: this.captureFrame(card.video, [mainFace], frameCaptureCanvas, mainFace, true),
-                                    score: score
-                                };
                             }
+                            
+                            // Always update lastClearFrame with the current frame's data for the next iteration.
+                            lastClearFrame = {
+                                fullFrameUrl: this.captureFrame(card.video, detections, frameCaptureCanvas, mainFace),
+                                croppedFaceUrl: this.captureFrame(card.video, [mainFace], frameCaptureCanvas, mainFace, true),
+                                score: score
+                            };
+
                             this.drawDetections(overlayCtx, detections, mainFace, isBlurry, card.video);
                         } else {
                             card.scoreEl.textContent = '얼굴 미검출';
