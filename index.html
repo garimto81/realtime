@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.22 (레이아웃 오류 수정)</title>
+    <title>실시간 포커스 모니터 Ver 2.23 (로그 삭제 기능)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.22</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.23</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -98,7 +98,7 @@
         <div id="blur-log-panel" class="mt-8 bg-gray-800 p-4 rounded-xl shadow-lg hidden">
             <div class="flex justify-between items-center mb-4">
                 <h3 id="blur-log-title" class="text-white font-bold text-lg">흐림 감지 로그</h3>
-                <button id="clear-log-button" class="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">현재 로그 지우기</button>
+                <button id="clear-log-button" class="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">현재 세션 모두 지우기</button>
             </div>
             <div id="blur-log-container" class="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
             </div>
@@ -178,7 +178,16 @@
 
             async add(storeName, data) { return this.db.add(storeName, data); }
             async getAll(storeName) { return this.db.getAll(storeName); }
-            async getAllFromIndex(storeName, indexName, query) { return this.db.getAllFromIndex(storeName, indexName, query); }
+            async getAllFromIndex(storeName, indexName, query) {
+                const results = [];
+                let cursor = await this.db.transaction(storeName).store.index(indexName).openCursor(IDBKeyRange.only(query));
+                while (cursor) {
+                    results.push({ id: cursor.primaryKey, ...cursor.value });
+                    cursor = await cursor.continue();
+                }
+                return results;
+            }
+            async delete(storeName, key) { return this.db.delete(storeName, key); }
             async clearStore(storeName) { return this.db.clear(storeName); }
             async deleteFromIndex(storeName, indexName, query) {
                 const tx = this.db.transaction(storeName, 'readwrite');
@@ -324,12 +333,20 @@
                 return card;
             }
 
-            renderBlurLog(logEntries) {
+            renderBlurLog(logEntries, deleteHandler) {
                 this.dom.blurLogContainer.innerHTML = '';
                 this.dom.blurLogPanel.classList.toggle('hidden', logEntries.length === 0);
                 logEntries.forEach(entry => {
                     const logItem = document.createElement('div');
-                    logItem.className = 'bg-gray-700 p-3 rounded-lg';
+                    logItem.className = 'bg-gray-700 p-3 rounded-lg relative';
+                    
+                    const deleteButton = document.createElement('button');
+                    deleteButton.innerHTML = '&times;';
+                    deleteButton.className = 'absolute top-2 right-2 text-2xl text-gray-400 hover:text-white leading-none p-1';
+                    deleteButton.title = '이 로그 삭제';
+                    deleteButton.onclick = () => deleteHandler(entry);
+                    logItem.appendChild(deleteButton);
+
                     const createFrame = (title, color, dataUrl, score) => {
                         const wrapper = document.createElement('div');
                         wrapper.className = 'text-center cursor-pointer';
@@ -347,7 +364,7 @@
                         wrapper.addEventListener('click', () => this.showImageInLightbox(dataUrl));
                         return wrapper;
                     };
-                    logItem.innerHTML = `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`;
+                    logItem.insertAdjacentHTML('beforeend', `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`);
                     const framesContainer = document.createElement('div');
                     framesContainer.className = 'grid grid-cols-2 gap-4';
                     if (entry.clearFrameUrl) {
@@ -752,14 +769,17 @@
             }
 
             async saveBlurLog(logEntry) {
-                this.sessionLogEntries.push(logEntry);
-                this.ui.renderBlurLog(this.sessionLogEntries);
-                if (!this.isDbAvailable || !this.currentSessionId) return;
-                try {
-                    await this.dbManager.add('blurLogs', { ...logEntry, sessionId: this.currentSessionId });
-                } catch (error) {
-                    this.addDebugLog('Failed to save log to DB.', 'ERROR', error);
+                const newEntry = { ...logEntry };
+                if (this.isDbAvailable && this.currentSessionId) {
+                    try {
+                        const newId = await this.dbManager.add('blurLogs', { ...newEntry, sessionId: this.currentSessionId });
+                        newEntry.id = newId; // Add db id for later deletion
+                    } catch (error) {
+                        this.addDebugLog('Failed to save log to DB.', 'ERROR', error);
+                    }
                 }
+                this.sessionLogEntries.push(newEntry);
+                this.ui.renderBlurLog(this.sessionLogEntries, (entry) => this.handleDeleteLog(entry));
             }
 
             async loadSessions() {
@@ -776,21 +796,34 @@
                 if (sessionId) {
                     const sessionText = e.target.options[e.target.selectedIndex].text;
                     this.ui.dom.blurLogTitle.textContent = `흐림 감지 로그 (${sessionText})`;
-                    const logs = await this.dbManager.getAllFromIndex('blurLogs', 'sessionId', Number(sessionId));
-                    this.ui.renderBlurLog(logs);
+                    this.sessionLogEntries = await this.dbManager.getAllFromIndex('blurLogs', 'sessionId', Number(sessionId));
+                    this.ui.renderBlurLog(this.sessionLogEntries, (entry) => this.handleDeleteLog(entry));
                 } else {
                     this.ui.dom.blurLogTitle.textContent = '흐림 감지 로그';
-                    this.ui.renderBlurLog([]);
+                    this.sessionLogEntries = [];
+                    this.ui.renderBlurLog(this.sessionLogEntries, (entry) => this.handleDeleteLog(entry));
                 }
             }
             
+            async handleDeleteLog(entryToDelete) {
+                const index = this.sessionLogEntries.findIndex(entry => entry === entryToDelete);
+                if (index > -1) {
+                    this.sessionLogEntries.splice(index, 1);
+                    if (this.isDbAvailable && entryToDelete.id) {
+                        await this.dbManager.delete('blurLogs', entryToDelete.id);
+                        this.addDebugLog(`Deleted log entry with id: ${entryToDelete.id}`, 'INFO');
+                    }
+                    this.ui.renderBlurLog(this.sessionLogEntries, (entry) => this.handleDeleteLog(entry));
+                }
+            }
+
             async clearCurrentSessionLogs() {
                 const selectedSessionId = this.ui.dom.sessionSelect.value;
                 if (this.isDbAvailable && selectedSessionId) {
                     await this.dbManager.deleteFromIndex('blurLogs', 'sessionId', Number(selectedSessionId));
                 }
                 this.sessionLogEntries = [];
-                this.ui.renderBlurLog([]);
+                this.ui.renderBlurLog(this.sessionLogEntries, (entry) => this.handleDeleteLog(entry));
             }
 
             clearAllData() {
@@ -799,7 +832,7 @@
                     await this.dbManager.clearStore('sessions');
                     await this.dbManager.clearStore('blurLogs');
                     await this.loadSessions();
-                    this.ui.renderBlurLog([]);
+                    this.ui.renderBlurLog([], (entry) => this.handleDeleteLog(entry));
                     this.addDebugLog('All data has been cleared.', 'WARN');
                 });
             }
