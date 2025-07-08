@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.21 (해상도 선택)</title>
+    <title>실시간 포커스 모니터 Ver 2.22 (레이아웃 오류 수정)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.21</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.22</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -327,7 +327,7 @@
             renderBlurLog(logEntries) {
                 this.dom.blurLogContainer.innerHTML = '';
                 this.dom.blurLogPanel.classList.toggle('hidden', logEntries.length === 0);
-                [...logEntries].reverse().forEach(entry => {
+                logEntries.forEach(entry => {
                     const logItem = document.createElement('div');
                     logItem.className = 'bg-gray-700 p-3 rounded-lg';
                     const createFrame = (title, color, dataUrl, score) => {
@@ -359,7 +359,7 @@
                     } else { framesContainer.appendChild(document.createElement('div')); }
                     framesContainer.appendChild(createFrame('흐린 얼굴 (크롭)', 'text-red-400', entry.croppedBlurryFaceUrl, entry.blurryScore.toFixed(1)));
                     logItem.appendChild(framesContainer);
-                    this.dom.blurLogContainer.appendChild(logItem);
+                    this.dom.blurLogContainer.prepend(logItem);
                 });
             }
 
@@ -558,10 +558,6 @@
                 this.addDebugLog('All monitoring stopped.', 'SUCCESS');
             }
             
-            // =================================================================
-            // ANALYSIS & RENDERING
-            // =================================================================
-
             startAnalysisLoop(card, deviceId, isPrimary) {
                 const processCtx = card.processCanvas.getContext('2d', { willReadFrequently: true });
                 let alertState = { active: false, lastAlertTime: 0 };
@@ -729,13 +725,18 @@
                 const customSize = this.ui.dom.customSizeInput.value;
                 this.addDebugLog(`Applying output size. Selected: ${selectedSize}, Custom: ${customSize || 'N/A'}`);
                 this.ui.dom.customSizeInput.disabled = selectedSize !== 'custom';
+                
                 const sizeMap = { '480': '480px', '720': '720px', '1080': '1080px' };
                 const maxHeight = sizeMap[selectedSize] || 'none';
                 const maxWidth = selectedSize === 'custom' ? (customSize ? `${customSize}px` : 'none') : 'none';
                 this.addDebugLog(`Calculated styles - maxWidth: ${maxWidth}, maxHeight: ${maxHeight}`);
+
                 document.querySelectorAll('.camera-card').forEach(card => {
                     card.style.maxWidth = maxWidth;
-                    card.style.maxHeight = maxHeight;
+                    const videoContainer = card.querySelector('.relative');
+                    if (videoContainer) {
+                        videoContainer.style.maxHeight = maxHeight;
+                    }
                 });
                 this.saveSettings();
                 this.addDebugLog(`Output size styles applied.`);
