@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.27 (UI/로직 개선)</title>
+    <title>실시간 포커스 모니터 Ver 2.29 (UI 개선)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.27</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.29</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -332,8 +332,16 @@
                 card.scoreEl.className = 'absolute bottom-2 left-1/2 -translate-x-1/2 font-bold text-2xl text-white bg-black bg-opacity-50 px-2 rounded';
                 card.processCanvas = document.createElement('canvas');
                 card.processCanvas.className = 'hidden';
+
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'flex justify-center mt-2';
+                card.captureButton = document.createElement('button');
+                card.captureButton.className = 'manual-capture-button bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded text-sm font-semibold';
+                card.captureButton.textContent = '현재 장면 추출';
+                actionsDiv.appendChild(card.captureButton);
+
                 card.videoContainer.append(card.video, card.overlayCanvas, infoDiv, card.scoreEl);
-                card.wrapper.append(card.videoContainer, card.processCanvas);
+                card.wrapper.append(card.videoContainer, actionsDiv, card.processCanvas);
                 return card;
             }
 
@@ -368,17 +376,25 @@
                         wrapper.addEventListener('click', () => this.showImageInLightbox(dataUrl));
                         return wrapper;
                     };
-                    logItem.insertAdjacentHTML('beforeend', `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`);
+                    
+                    const isManual = entry.type === 'manual';
+                    logItem.insertAdjacentHTML('beforeend', `<div class="text-center mb-2 text-sm"><p class="text-gray-300">${isManual ? '수동 추출' : '흐림 감지'} 시간: ${entry.timestamp}</p></div>`);
                     const framesContainer = document.createElement('div');
                     framesContainer.className = 'grid grid-cols-2 gap-4';
-                    if (entry.clearFrameUrl) {
-                        framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1)));
-                    } else { framesContainer.appendChild(document.createElement('div')); }
-                    framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1)));
-                    if (entry.croppedClearFaceUrl) {
-                         framesContainer.appendChild(createFrame('선명한 얼굴 (크롭)', 'text-green-400', entry.croppedClearFaceUrl, entry.clearScore.toFixed(1)));
-                    } else { framesContainer.appendChild(document.createElement('div')); }
-                    framesContainer.appendChild(createFrame('흐린 얼굴 (크롭)', 'text-red-400', entry.croppedBlurryFaceUrl, entry.blurryScore.toFixed(1)));
+                    
+                    if (isManual) {
+                        framesContainer.appendChild(createFrame('추출 프레임', 'text-blue-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1)));
+                        framesContainer.appendChild(createFrame('추출 얼굴 (크롭)', 'text-blue-400', entry.croppedBlurryFaceUrl, entry.blurryScore.toFixed(1)));
+                    } else {
+                        if (entry.clearFrameUrl) {
+                            framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1)));
+                        } else { framesContainer.appendChild(document.createElement('div')); }
+                        framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1)));
+                        if (entry.croppedClearFaceUrl) {
+                             framesContainer.appendChild(createFrame('선명한 얼굴 (크롭)', 'text-green-400', entry.croppedClearFaceUrl, entry.clearScore.toFixed(1)));
+                        } else { framesContainer.appendChild(document.createElement('div')); }
+                        framesContainer.appendChild(createFrame('흐린 얼굴 (크롭)', 'text-red-400', entry.croppedBlurryFaceUrl, entry.blurryScore.toFixed(1)));
+                    }
                     logItem.appendChild(framesContainer);
                     this.dom.blurLogContainer.prepend(logItem);
                 });
@@ -556,10 +572,11 @@
                     card.video.srcObject = stream;
                     const deviceInfo = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === device.deviceId);
                     card.nameEl.textContent = deviceInfo.label || `카메라 ${this.activeStreams.length}`;
+                    card.captureButton.onclick = () => this.handleManualCapture(card);
                     card.video.onplaying = () => this.onMediaPlaying(card, device.deviceId, isPrimary);
                 } catch (err) {
                     this.addDebugLog(`Failed to get stream for ${device.deviceId}`, 'ERROR', err);
-                    this.handleAnalysisError(card, device.deviceId);
+                    this.handleAnalysisError(card);
                 }
             }
 
@@ -657,13 +674,14 @@
                         requestAnimationFrame(loop);
                     } catch (error) {
                         this.addDebugLog("Analysis loop error", "ERROR", error);
-                        this.handleAnalysisError(card, deviceId);
+                        this.handleAnalysisError(card);
                     }
                 };
                 this.analysisLoops.set(deviceId, requestAnimationFrame(loop));
             }
 
-            handleAnalysisError(card, deviceId) {
+            handleAnalysisError(card) {
+                const deviceId = JSON.parse(card.wrapper.dataset.device).deviceId;
                 this.analysisLoops.delete(deviceId);
                 const errorOverlay = document.createElement('div');
                 errorOverlay.className = 'absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center gap-2';
@@ -678,6 +696,36 @@
                 }, 2000);
             }
             
+            handleManualCapture(card) {
+                const video = card.video;
+                if (!video.srcObject?.active || video.paused || video.videoWidth === 0) {
+                    this.addDebugLog('Cannot capture, video not active.', 'WARN');
+                    return;
+                }
+                const detections = this.faceDetector.detectForVideo(video, performance.now()).detections;
+                if (detections.length === 0) {
+                    alert('얼굴이 감지되지 않아 추출할 수 없습니다.');
+                    return;
+                }
+                const mainFace = this.getCentermostFace(detections, video.videoWidth, video.videoHeight);
+                if (!mainFace) return;
+
+                const processCtx = card.processCanvas.getContext('2d');
+                processCtx.drawImage(video, 0, 0, card.processCanvas.width, card.processCanvas.height);
+                const box = mainFace.boundingBox;
+                const faceImageData = processCtx.getImageData(Math.max(0, box.originX), Math.max(0, box.originY), Math.min(card.processCanvas.width - box.originX, box.width), Math.min(card.processCanvas.height - box.originY, box.height));
+                const score = this.calculateFocusScore(faceImageData);
+                
+                const frameCaptureCanvas = document.createElement('canvas');
+                this.saveBlurLog({
+                    type: 'manual',
+                    timestamp: new Date().toLocaleTimeString(),
+                    blurryFrameUrl: this.captureFrame(video, detections, frameCaptureCanvas, mainFace),
+                    croppedBlurryFaceUrl: this.captureFrame(video, [mainFace], frameCaptureCanvas, mainFace, true),
+                    blurryScore: score,
+                });
+            }
+
             captureAndLog(video, detections, mainFace, score, lastClearFrame, canvas) {
                 this.saveBlurLog({
                     timestamp: new Date().toLocaleTimeString(),
