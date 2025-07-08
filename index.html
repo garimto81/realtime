@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.17 (이미지 확대 기능)</title>
+    <title>실시간 포커스 모니터 Ver 2.20 (최종 안정화)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
     <style>
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #111827; color: #f3f4f6; }
-        .camera-card { background-color: #1f2937; border: 2px solid #374151; transition: border-color 0.3s ease-in-out, max-width 0.3s ease-in-out; }
+        .camera-card { background-color: #1f2937; border: 2px solid #374151; transition: border-color 0.3s ease-in-out, max-width 0.3s ease-in-out, max-height 0.3s ease-in-out; }
         .camera-card.alert { border-color: #ef4444; animation: pulse-red 1s infinite; }
         @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } }
         .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.17</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.20</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -39,7 +39,6 @@
             </p>
         </header>
 
-        <!-- Controls Panel -->
         <div class="bg-gray-800 p-4 rounded-xl shadow-lg mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="control-group space-y-3">
                 <p class="font-bold text-white">초점 기준</p>
@@ -67,12 +66,12 @@
                 <p class="font-bold text-white">출력 크기</p>
                 <div class="flex flex-wrap gap-x-4 gap-y-2">
                     <div class="flex items-center"><input type="radio" id="size-auto" name="output-size" value="auto" class="h-4 w-4" checked><label for="size-auto" class="ml-2">자동</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-480" name="output-size" value="480p" class="h-4 w-4"><label for="size-480" class="ml-2">480p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-720" name="output-size" value="720p" class="h-4 w-4"><label for="size-720" class="ml-2">720p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-1080" name="output-size" value="1080p" class="h-4 w-4"><label for="size-1080" class="ml-2">1080p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-custom" name="output-size" value="custom" class="h-4 w-4"><label for="size-custom" class="ml-2">지정:</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-480" name="output-size" value="480" class="h-4 w-4"><label for="size-480" class="ml-2">480p</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-720" name="output-size" value="720" class="h-4 w-4"><label for="size-720" class="ml-2">720p</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-1080" name="output-size" value="1080" class="h-4 w-4"><label for="size-1080" class="ml-2">1080p</label></div>
+                    <div class="flex items-center"><input type="radio" id="size-custom" name="output-size" value="custom" class="h-4 w-4"><label for="size-custom" class="ml-2">너비 지정:</label></div>
                 </div>
-                <input type="number" id="custom-size-input" placeholder="너비(px)" class="w-full p-2 bg-gray-700 rounded-md border-gray-600" disabled>
+                <input type="number" id="custom-size-input" placeholder="최대 너비(px)" class="w-full p-2 bg-gray-700 rounded-md border-gray-600" disabled>
             </div>
             <div class="control-group space-y-3" id="history-control-group">
                  <p class="font-bold text-white">기록 관리</p>
@@ -90,7 +89,7 @@
         </div>
         
         <div class="flex justify-center my-4">
-             <button id="main-action-button" class="bg-blue-600 text-white font-bold py-3 px-8 text-lg rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed" disabled>모니터링 시작</button>
+             <button id="main-action-button" class="bg-blue-600 text-white font-bold py-3 px-8 text-lg rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed">모니터링 시작</button>
         </div>
         
         <div id="camera-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
@@ -114,7 +113,6 @@
         </div>
     </div>
     
-    <!-- Camera Selection Modal -->
     <div id="camera-select-modal" class="custom-modal-backdrop">
         <div class="custom-modal-content">
             <h3 class="text-lg font-bold mb-4 text-white">모니터링할 카메라 선택</h3>
@@ -126,7 +124,6 @@
         </div>
     </div>
 
-    <!-- Custom Confirm Modal -->
     <div id="custom-confirm-modal" class="custom-modal-backdrop">
         <div class="custom-modal-content">
             <h3 id="confirm-modal-title" class="text-lg font-bold text-white mb-4"></h3>
@@ -138,7 +135,6 @@
         </div>
     </div>
 
-    <!-- Image Lightbox Modal -->
     <div id="image-lightbox-modal" class="custom-modal-backdrop">
         <span id="lightbox-close-button" class="absolute top-4 right-6 text-white text-5xl font-bold cursor-pointer hover:text-gray-300">&times;</span>
         <img id="lightbox-image" class="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl">
@@ -163,10 +159,8 @@
                 if (!window.idb) {
                     throw new Error('IndexedDB library (idb) is not loaded.');
                 }
-
                 this.db = await idb.openDB(this.dbName, this.dbVersion, {
                     upgrade: (db) => {
-                        console.log(`Upgrading DB to version ${this.dbVersion}`);
                         for (const storeName of Object.keys(this.storeConfigs)) {
                             if (!db.objectStoreNames.contains(storeName)) {
                                 const config = this.storeConfigs[storeName];
@@ -178,7 +172,6 @@
                         }
                     },
                 });
-                console.log('IndexedDB initialized successfully.');
                 return this.db;
             }
 
@@ -186,7 +179,6 @@
             async getAll(storeName) { return this.db.getAll(storeName); }
             async getAllFromIndex(storeName, indexName, query) { return this.db.getAllFromIndex(storeName, indexName, query); }
             async clearStore(storeName) { return this.db.clear(storeName); }
-            
             async deleteFromIndex(storeName, indexName, query) {
                 const tx = this.db.transaction(storeName, 'readwrite');
                 const index = tx.store.index(indexName);
@@ -234,7 +226,7 @@
                 this.dom.statusText.textContent = message;
                 this.dom.loadingSpinner.style.display = type === 'loading' ? 'block' : 'none';
                 const container = this.dom.statusContainer;
-                container.className = 'text-lg mt-2 flex items-center justify-center gap-2'; // Reset classes
+                container.className = 'text-lg mt-2 flex items-center justify-center gap-2';
                 if (type === 'success') container.classList.add('text-green-400');
                 else if (type === 'error') container.classList.add('text-red-400');
                 else container.classList.add('text-yellow-400');
@@ -244,15 +236,14 @@
                 this.dom.mainActionButton.disabled = state === 'initializing';
                 if (state === 'stopped') {
                     this.dom.mainActionButton.textContent = '모니터링 시작';
-                    this.updateStatus('모니터링이 중지되었습니다. 다시 시작하려면 버튼을 누르세요.', 'idle');
+                    this.updateStatus('모니터링할 카메라를 선택하세요.', 'idle');
                 } else if (state === 'monitoring') {
                     this.dom.mainActionButton.textContent = '모니터링 중지';
                 }
             }
             
             toggleModal(modalId, show) {
-                const modal = this.dom[modalId];
-                if (modal) modal.style.display = show ? 'flex' : 'none';
+                this.dom[modalId].style.display = show ? 'flex' : 'none';
             }
 
             showConfirm(title, body, onOk) {
@@ -286,29 +277,25 @@
                 const card = {};
                 card.wrapper = document.createElement('div');
                 card.wrapper.className = 'camera-card rounded-lg p-4 flex flex-col gap-2';
-                
                 card.videoContainer = document.createElement('div');
-                card.videoContainer.className = 'relative w-full aspect-video';
-                
+                card.videoContainer.className = 'relative w-full';
                 card.video = document.createElement('video');
                 card.video.autoplay = true; card.video.muted = true; card.video.playsInline = true;
                 card.video.className = 'w-full h-full rounded-md bg-black';
-                
                 card.overlayCanvas = document.createElement('canvas');
                 card.overlayCanvas.className = 'overlay-canvas';
-                
                 const infoDiv = document.createElement('div');
-                infoDiv.className = 'absolute top-0 left-0 w-full p-2 text-xs text-white bg-black bg-opacity-50 flex justify-between';
+                infoDiv.className = 'absolute top-0 left-0 w-full p-2 text-xs text-white bg-black bg-opacity-50 flex justify-between items-center flex-wrap gap-x-4';
                 card.nameEl = document.createElement('span');
-                card.resolutionEl = document.createElement('span');
-                infoDiv.append(card.nameEl, card.resolutionEl);
-
+                const resolutionContainer = document.createElement('div');
+                card.originalResolutionEl = document.createElement('span');
+                card.currentResolutionEl = document.createElement('span');
+                resolutionContainer.append(card.originalResolutionEl, card.currentResolutionEl);
+                infoDiv.append(card.nameEl, resolutionContainer);
                 card.scoreEl = document.createElement('p');
                 card.scoreEl.className = 'absolute bottom-2 left-1/2 -translate-x-1/2 font-bold text-2xl text-white bg-black bg-opacity-50 px-2 rounded';
-                
                 card.processCanvas = document.createElement('canvas');
                 card.processCanvas.className = 'hidden';
-
                 card.videoContainer.append(card.video, card.overlayCanvas, infoDiv, card.scoreEl);
                 card.wrapper.append(card.videoContainer, card.processCanvas);
                 return card;
@@ -320,7 +307,6 @@
                 [...logEntries].reverse().forEach(entry => {
                     const logItem = document.createElement('div');
                     logItem.className = 'bg-gray-700 p-3 rounded-lg';
-
                     const createFrame = (title, color, dataUrl, score) => {
                         const wrapper = document.createElement('div');
                         wrapper.className = 'text-center cursor-pointer';
@@ -338,26 +324,17 @@
                         wrapper.addEventListener('click', () => this.showImageInLightbox(dataUrl));
                         return wrapper;
                     };
-
                     logItem.innerHTML = `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`;
-                    
                     const framesContainer = document.createElement('div');
                     framesContainer.className = 'grid grid-cols-2 gap-4';
-
                     if (entry.clearFrameUrl) {
                         framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1)));
-                    } else { 
-                        framesContainer.appendChild(document.createElement('div'));
-                    }
+                    } else { framesContainer.appendChild(document.createElement('div')); }
                     framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1)));
-                    
                     if (entry.croppedClearFaceUrl) {
                          framesContainer.appendChild(createFrame('선명한 얼굴 (크롭)', 'text-green-400', entry.croppedClearFaceUrl, entry.clearScore.toFixed(1)));
-                    } else { 
-                        framesContainer.appendChild(document.createElement('div'));
-                    }
+                    } else { framesContainer.appendChild(document.createElement('div')); }
                     framesContainer.appendChild(createFrame('흐린 얼굴 (크롭)', 'text-red-400', entry.croppedBlurryFaceUrl, entry.blurryScore.toFixed(1)));
-
                     logItem.appendChild(framesContainer);
                     this.dom.blurLogContainer.appendChild(logItem);
                 });
@@ -411,7 +388,7 @@
                     await this.loadSessions();
                 } catch (error) {
                     this.isDbAvailable = false;
-                    this.addDebugLog('Failed to initialize IndexedDB.', 'ERROR', { name: error.name, message: error.message });
+                    this.addDebugLog('Failed to initialize IndexedDB.', 'ERROR', error);
                     this.ui.disableLoggingFeatures();
                 }
                 try {
@@ -437,25 +414,21 @@
             }
 
             addEventListeners() {
-                // Main Actions
                 this.ui.dom.mainActionButton.addEventListener('click', () => this.handleMainAction());
                 this.ui.dom.modalCancelButton.addEventListener('click', () => this.ui.toggleModal('cameraSelectModal', false));
                 this.ui.dom.modalStartButton.addEventListener('click', () => this.startSelectedMonitoring());
                 
-                // Settings
                 const settingsToSave = ['thresholdSlider', 'thresholdInput', 'sensitivitySlider', 'sensitivityInput', 'autoThresholdCheckbox', 'muteCheckbox', 'debugModeCheckbox'];
                 settingsToSave.forEach(id => this.ui.dom[id].addEventListener('change', () => this.saveSettings()));
                 this.ui.dom.sizeRadios.forEach(radio => radio.addEventListener('change', () => this.applyOutputSize()));
                 this.ui.dom.customSizeInput.addEventListener('input', () => this.applyOutputSize());
 
-                // Logging
                 this.ui.dom.clearLogButton.addEventListener('click', () => this.clearCurrentSessionLogs());
                 this.ui.dom.clearDebugLogButton.addEventListener('click', () => this.clearDebugLogs());
                 this.ui.dom.clearAllLogsButton.addEventListener('click', () => this.clearAllData());
                 this.ui.dom.sessionSelect.addEventListener('change', (e) => this.handleSessionChange(e));
                 this.ui.dom.downloadLogButton.addEventListener('click', () => this.downloadSessionLog());
                 
-                // Lightbox
                 this.ui.dom.lightboxCloseButton.addEventListener('click', () => this.ui.toggleModal('imageLightboxModal', false));
                 this.ui.dom.imageLightboxModal.addEventListener('click', (e) => {
                     if (e.target === this.ui.dom.imageLightboxModal) {
@@ -463,14 +436,9 @@
                     }
                 });
 
-                // Misc
                 this.ui.dom.debugLogContainer.addEventListener('scroll', () => { this.userHasScrolledDebug = this.ui.dom.debugLogContainer.scrollTop > 0; });
                 this.ui.dom.confirmModalCancel.addEventListener('click', () => this.ui.toggleModal('customConfirmModal', false));
             }
-
-            // =================================================================
-            // CORE ACTIONS
-            // =================================================================
 
             handleMainAction() {
                 this.startAudioContext();
@@ -531,17 +499,27 @@
                     card.video.srcObject = stream;
                     const device = (await navigator.mediaDevices.enumerateDevices()).find(d => d.deviceId === deviceId);
                     card.nameEl.textContent = device.label || `카메라 ${this.activeStreams.length}`;
-                    card.video.onplaying = () => {
-                        this.addDebugLog(`Video started for ${deviceId}`);
-                        Object.assign(card.processCanvas, { width: card.video.videoWidth, height: card.video.videoHeight });
-                        Object.assign(card.overlayCanvas, { width: card.video.videoWidth, height: card.video.videoHeight });
-                        card.resolutionEl.textContent = `원본: ${card.video.videoWidth}x${card.video.videoHeight}`;
-                        this.startAnalysisLoop(card, deviceId, isPrimary);
-                    };
+                    card.video.onplaying = () => this.onMediaPlaying(card, deviceId, isPrimary);
                 } catch (err) {
                     this.addDebugLog(`Failed to get stream for ${deviceId}`, 'ERROR', err);
                     card.wrapper.innerHTML = `<div class="w-full h-full bg-black rounded-md flex items-center justify-center p-4"><p class="text-yellow-400 text-center">카메라 열기 실패<br><span class="text-sm text-gray-400">${err.name}</span></p></div>`;
                 }
+            }
+
+            onMediaPlaying(card, deviceId, isPrimary) {
+                this.addDebugLog(`Media started for ${deviceId}`);
+                Object.assign(card.processCanvas, { width: card.video.videoWidth, height: card.video.videoHeight });
+                Object.assign(card.overlayCanvas, { width: card.video.videoWidth, height: card.video.videoHeight });
+                card.originalResolutionEl.textContent = `원본: ${card.video.videoWidth}x${card.video.videoHeight}`;
+                const resizeObserver = new ResizeObserver(entries => {
+                    for (let entry of entries) {
+                        const { width, height } = entry.contentRect;
+                        card.currentResolutionEl.textContent = ` / 현재: ${Math.round(width)}x${Math.round(height)}`;
+                    }
+                });
+                resizeObserver.observe(card.video);
+                card.resizeObserver = resizeObserver;
+                this.startAnalysisLoop(card, deviceId, isPrimary);
             }
 
             stopAllMonitoring() {
@@ -551,6 +529,10 @@
                 this.analysisLoops.forEach(id => cancelAnimationFrame(id));
                 this.analysisLoops.clear();
                 this.cameraAnalysisData.clear();
+                this.ui.dom.cameraGrid.querySelectorAll('.camera-card').forEach(cardEl => {
+                    const videoEl = cardEl.querySelector('video');
+                    if (videoEl?.resizeObserver) videoEl.resizeObserver.disconnect();
+                });
                 this.ui.dom.cameraGrid.innerHTML = '';
                 this.ui.dom.blurLogPanel.classList.add('hidden');
                 this.currentSessionId = null;
@@ -567,15 +549,14 @@
                 const processCtx = card.processCanvas.getContext('2d', { willReadFrequently: true });
                 let alertState = { active: false, lastAlertTime: 0 };
                 const analysisData = this.cameraAnalysisData.get(deviceId);
-                let lastClearFrame = { fullFrameUrl: null, croppedFaceUrl: null, score: 0, detections: [] };
+                let lastClearFrame = { fullFrameUrl: null, croppedFaceUrl: null, score: 0 };
                 const frameCaptureCanvas = document.createElement('canvas');
 
                 const loop = () => {
                     if (!this.analysisLoops.has(deviceId)) return;
                     try {
                         if (!card.video.srcObject?.active || card.video.paused || card.video.videoWidth === 0) {
-                            this.analysisLoops.delete(deviceId);
-                            return;
+                            this.analysisLoops.delete(deviceId); return;
                         }
                         const detections = this.faceDetector.detectForVideo(card.video, performance.now()).detections;
                         const overlayCtx = card.overlayCanvas.getContext('2d');
@@ -583,54 +564,43 @@
                         
                         if (detections.length > 0) {
                             const mainFace = this.getCentermostFace(detections, card.video.videoWidth, card.video.videoHeight);
-                            if (!mainFace) {
-                                analysisData.lastPosition = null;
-                                requestAnimationFrame(loop);
-                                return;
-                            }
+                            if (!mainFace) { analysisData.lastPosition = null; requestAnimationFrame(loop); return; }
                             const box = mainFace.boundingBox;
                             processCtx.drawImage(card.video, 0, 0, card.processCanvas.width, card.processCanvas.height);
                             const faceImageData = processCtx.getImageData(Math.max(0, box.originX), Math.max(0, box.originY), Math.min(card.processCanvas.width - box.originX, box.width), Math.min(card.processCanvas.height - box.originY, box.height));
                             const score = this.calculateFocusScore(faceImageData);
-                            
                             const currentCenter = { x: box.originX + box.width / 2, y: box.originY + box.height / 2 };
                             const movementDistance = analysisData.lastPosition ? Math.hypot(currentCenter.x - analysisData.lastPosition.x, currentCenter.y - analysisData.lastPosition.y) : 0;
                             analysisData.lastPosition = currentCenter;
-                            
                             const isStationary = movementDistance < 5.0;
                             let isScoreLow;
                             if (this.ui.dom.autoThresholdCheckbox.checked) {
                                 analysisData.scores.push(score);
                                 if (analysisData.scores.length > 50) analysisData.scores.shift();
                                 const avg = analysisData.scores.length > 30 ? analysisData.scores.reduce((a, b) => a + b, 0) / analysisData.scores.length : 0;
-                                analysisData.average = avg;
                                 isScoreLow = avg > 0 && score < avg * (parseFloat(this.ui.dom.sensitivityInput.value) / 100);
                                 card.scoreEl.textContent = `${score.toFixed(1)} / ${avg.toFixed(1)}`;
                             } else {
                                 isScoreLow = score < parseFloat(this.ui.dom.thresholdInput.value);
                                 card.scoreEl.textContent = score.toFixed(1);
                             }
-                            
                             const isBlurry = isScoreLow && isStationary;
                             card.scoreEl.classList.toggle('text-red-500', isBlurry);
-                            card.wrapper.classList.toggle('alert', isBlurry && alertState.active);
-                            
                             if (isBlurry) {
                                 if (!alertState.active && (performance.now() - alertState.lastAlertTime > 1000)) {
                                     alertState = { active: true, lastAlertTime: performance.now() };
+                                    card.wrapper.classList.add('alert');
                                     this.playAlertSound();
                                     if (isPrimary) this.captureAndLog(card.video, detections, mainFace, score, lastClearFrame, frameCaptureCanvas);
                                 }
                             } else {
+                                if (alertState.active) card.wrapper.classList.remove('alert');
                                 alertState.active = false;
-                                if (!isScoreLow) {
-                                    lastClearFrame = {
-                                        fullFrameUrl: this.captureFrame(card.video, detections, frameCaptureCanvas),
-                                        croppedFaceUrl: this.captureFrame(card.video, [mainFace], frameCaptureCanvas, mainFace, true),
-                                        score: score,
-                                        detections: detections
-                                    };
-                                }
+                                if (!isScoreLow) lastClearFrame = {
+                                    fullFrameUrl: this.captureFrame(card.video, detections, frameCaptureCanvas, mainFace),
+                                    croppedFaceUrl: this.captureFrame(card.video, [mainFace], frameCaptureCanvas, mainFace, true),
+                                    score: score
+                                };
                             }
                             this.drawDetections(overlayCtx, detections, mainFace, isBlurry, card.video);
                         } else {
@@ -639,22 +609,19 @@
                         }
                         requestAnimationFrame(loop);
                     } catch (error) {
-                        this.addDebugLog("Analysis loop error", "ERROR", {name: error.name, message: error.message});
-                        // Do not reschedule the loop on error to prevent error flood.
+                        this.addDebugLog("Analysis loop error", "ERROR", error);
                     }
                 };
                 this.analysisLoops.set(deviceId, requestAnimationFrame(loop));
             }
             
             captureAndLog(video, detections, mainFace, score, lastClearFrame, canvas) {
-                const blurryFrameDataUrl = this.captureFrame(video, detections, canvas, mainFace);
-                const croppedBlurryFaceUrl = this.captureFrame(video, [mainFace], canvas, mainFace, true);
                 this.saveBlurLog({
                     timestamp: new Date().toLocaleTimeString(),
                     clearFrameUrl: lastClearFrame.fullFrameUrl,
-                    blurryFrameUrl: blurryFrameDataUrl,
+                    blurryFrameUrl: this.captureFrame(video, detections, canvas, mainFace),
                     croppedClearFaceUrl: lastClearFrame.croppedFaceUrl,
-                    croppedBlurryFaceUrl: croppedBlurryFaceUrl,
+                    croppedBlurryFaceUrl: this.captureFrame(video, [mainFace], canvas, mainFace, true),
                     clearScore: lastClearFrame.score,
                     blurryScore: score
                 });
@@ -666,23 +633,20 @@
                 canvas.height = box.height;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, box.originX, box.originY, box.width, box.height, 0, 0, box.width, box.height);
-                if (!cropToFace) {
-                    this.drawDetections(ctx, detections, mainFace, !!mainFace, video);
-                }
+                if (!cropToFace) this.drawDetections(ctx, detections, mainFace, !!mainFace, video);
                 return canvas.toDataURL('image/jpeg', 0.8);
             }
 
             drawDetections(ctx, detections, mainFace, isBlurry, video) {
+                const isCropped = ctx.canvas.width !== video.videoWidth || ctx.canvas.height !== video.videoHeight;
                 detections.forEach(detection => {
                     const box = detection.boundingBox;
                     if (!box) return;
                     const isMain = detection === mainFace;
                     ctx.strokeStyle = isMain && isBlurry ? '#ef4444' : '#3b82f6';
                     ctx.lineWidth = isMain ? 4 : 2;
-                    
-                    const offsetX = (ctx.canvas.width !== video.videoWidth) ? -box.originX : 0;
-                    const offsetY = (ctx.canvas.height !== video.videoHeight) ? -box.originY : 0;
-
+                    const offsetX = isCropped ? -box.originX : 0;
+                    const offsetY = isCropped ? -box.originY : 0;
                     ctx.strokeRect(box.originX + offsetX, box.originY + offsetY, box.width, box.height);
                 });
             }
@@ -691,11 +655,8 @@
                 const { width, height, data } = imageData;
                 if (width * height === 0) return 0;
                 const gray = new Uint8Array(width * height);
-                for (let i = 0; i < data.length; i += 4) {
-                    gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-                }
-                let variance = 0;
-                let count = 0;
+                for (let i = 0; i < data.length; i += 4) gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                let variance = 0, count = 0;
                 for (let y = 1; y < height - 1; y++) {
                     for (let x = 1; x < width - 1; x++) {
                         const i = y * width + x;
@@ -708,7 +669,7 @@
             }
 
             getCentermostFace(detections, videoWidth, videoHeight) {
-                if (!detections || detections.length < 2) return detections[0] || null;
+                if (!detections || detections.length < 2) return detections?.[0] || null;
                 const center = { x: videoWidth / 2, y: videoHeight / 2 };
                 return detections.reduce((closest, current) => {
                     const distA = Math.hypot(center.x - (closest.boundingBox.originX + closest.boundingBox.width / 2), center.y - (closest.boundingBox.originY + closest.boundingBox.height / 2));
@@ -716,10 +677,6 @@
                     return distB < distA ? current : closest;
                 });
             }
-
-            // =================================================================
-            // SETTINGS & DATA MANAGEMENT
-            // =================================================================
 
             saveSettings() {
                 const settings = {
@@ -754,15 +711,16 @@
                 const selectedSize = document.querySelector('input[name="output-size"]:checked').value;
                 const customSize = this.ui.dom.customSizeInput.value;
                 this.ui.dom.customSizeInput.disabled = selectedSize !== 'custom';
-                const sizeMap = { '480p': '640px', '720p': '1280px', '1080p': '1920px' };
-                const maxWidth = selectedSize === 'custom' ? (customSize ? `${customSize}px` : 'none') : (sizeMap[selectedSize] || 'none');
-                document.querySelectorAll('.camera-card').forEach(card => card.style.maxWidth = maxWidth);
+                const sizeMap = { '480': '480px', '720': '720px', '1080': '1080px' };
+                const maxHeight = sizeMap[selectedSize] || 'none';
+                const maxWidth = selectedSize === 'custom' ? (customSize ? `${customSize}px` : 'none') : 'none';
+                document.querySelectorAll('.camera-card').forEach(card => {
+                    const videoContainer = card.querySelector('.relative');
+                    card.style.maxWidth = maxWidth;
+                    if (videoContainer) videoContainer.style.maxHeight = maxHeight;
+                });
                 this.saveSettings();
             }
-
-            // =================================================================
-            // LOGGING & DB
-            // =================================================================
 
             async createSession() {
                 this.sessionLogEntries = [];
@@ -807,19 +765,12 @@
             }
             
             async clearCurrentSessionLogs() {
-                if (this.isDbAvailable) {
-                    const selectedSessionId = this.ui.dom.sessionSelect.value;
-                    if (!selectedSessionId) {
-                        this.sessionLogEntries = [];
-                        this.ui.renderBlurLog([]);
-                        return;
-                    };
+                const selectedSessionId = this.ui.dom.sessionSelect.value;
+                if (this.isDbAvailable && selectedSessionId) {
                     await this.dbManager.deleteFromIndex('blurLogs', 'sessionId', Number(selectedSessionId));
-                    this.ui.renderBlurLog([]);
-                } else {
-                    this.sessionLogEntries = [];
-                    this.ui.renderBlurLog([]);
                 }
+                this.sessionLogEntries = [];
+                this.ui.renderBlurLog([]);
             }
 
             clearAllData() {
@@ -834,10 +785,7 @@
             }
             
             downloadSessionLog() {
-                if (this.sessionLogEntries.length === 0) {
-                    alert('다운로드할 로그가 없습니다.');
-                    return;
-                }
+                if (this.sessionLogEntries.length === 0) { alert('다운로드할 로그가 없습니다.'); return; }
                 const simplifiedLogs = this.sessionLogEntries.map(log => ({ timestamp: log.timestamp, clearScore: log.clearScore, blurryScore: log.blurryScore }));
                 const blob = new Blob([JSON.stringify(simplifiedLogs, null, 2)], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
@@ -848,7 +796,15 @@
             }
 
             addDebugLog(message, level = 'INFO', data = null) {
-                const logEntry = { timestamp: new Date().toLocaleTimeString(), level, message, data: data ? JSON.stringify(data) : null };
+                let processedData = null;
+                if (data) {
+                    if (data instanceof Error) {
+                        processedData = JSON.stringify({ name: data.name, message: data.message, stack: data.stack?.split('\n').map(s => s.trim()) });
+                    } else {
+                        processedData = JSON.stringify(data);
+                    }
+                }
+                const logEntry = { timestamp: new Date().toLocaleTimeString(), level, message, data: processedData };
                 this.debugLogEntries.push(logEntry);
                 if (this.debugLogEntries.length > this.MAX_DEBUG_LOGS) this.debugLogEntries.shift();
                 this.renderDebugLog();
