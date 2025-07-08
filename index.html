@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.13 (최종 안정화)</title>
+    <title>실시간 포커스 모니터 Ver 2.17 (이미지 확대 기능)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.13</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.17</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -138,6 +138,12 @@
         </div>
     </div>
 
+    <!-- Image Lightbox Modal -->
+    <div id="image-lightbox-modal" class="custom-modal-backdrop">
+        <span id="lightbox-close-button" class="absolute top-4 right-6 text-white text-5xl font-bold cursor-pointer hover:text-gray-300">&times;</span>
+        <img id="lightbox-image" class="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl">
+    </div>
+
 
     <script type="module">
         import { FaceDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
@@ -214,7 +220,8 @@
                     'blur-log-title', 'blur-log-container', 'clear-log-button', 'debug-panel',
                     'debug-log-container', 'clear-debug-log-button', 'custom-confirm-modal',
                     'confirm-modal-title', 'confirm-modal-body', 'confirm-modal-cancel', 'confirm-modal-ok',
-                    'history-control-group', 'download-log-button'
+                    'history-control-group', 'download-log-button',
+                    'image-lightbox-modal', 'lightbox-close-button', 'lightbox-image'
                 ];
                 ids.forEach(id => {
                     const camelCaseId = id.replace(/-(\w)/g, (_, c) => c.toUpperCase());
@@ -313,12 +320,13 @@
                 [...logEntries].reverse().forEach(entry => {
                     const logItem = document.createElement('div');
                     logItem.className = 'bg-gray-700 p-3 rounded-lg';
+
                     const createFrame = (title, color, dataUrl, score) => {
                         const wrapper = document.createElement('div');
-                        wrapper.className = 'text-center';
+                        wrapper.className = 'text-center cursor-pointer';
                         wrapper.innerHTML = `<p class="font-semibold mb-1 ${color}">${title}</p><p class="font-mono text-xs text-gray-400 -mt-1 mb-2">(점수: ${score})</p>`;
                         const canvas = document.createElement('canvas');
-                        canvas.className = 'w-full rounded-lg bg-black';
+                        canvas.className = 'w-full rounded-lg bg-black aspect-video object-contain';
                         wrapper.appendChild(canvas);
                         const img = new Image();
                         img.onload = () => {
@@ -327,18 +335,37 @@
                             canvas.getContext('2d').drawImage(img, 0, 0);
                         };
                         img.src = dataUrl;
+                        wrapper.addEventListener('click', () => this.showImageInLightbox(dataUrl));
                         return wrapper;
                     };
+
                     logItem.innerHTML = `<div class="text-center mb-2 text-sm"><p class="text-gray-300">감지 시간: ${entry.timestamp}</p></div>`;
+                    
                     const framesContainer = document.createElement('div');
-                    framesContainer.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+                    framesContainer.className = 'grid grid-cols-2 gap-4';
+
                     if (entry.clearFrameUrl) {
                         framesContainer.appendChild(createFrame('이전 프레임 (선명)', 'text-green-400', entry.clearFrameUrl, entry.clearScore.toFixed(1)));
+                    } else { 
+                        framesContainer.appendChild(document.createElement('div'));
                     }
                     framesContainer.appendChild(createFrame('현재 프레임 (흐림)', 'text-red-400', entry.blurryFrameUrl, entry.blurryScore.toFixed(1)));
+                    
+                    if (entry.croppedClearFaceUrl) {
+                         framesContainer.appendChild(createFrame('선명한 얼굴 (크롭)', 'text-green-400', entry.croppedClearFaceUrl, entry.clearScore.toFixed(1)));
+                    } else { 
+                        framesContainer.appendChild(document.createElement('div'));
+                    }
+                    framesContainer.appendChild(createFrame('흐린 얼굴 (크롭)', 'text-red-400', entry.croppedBlurryFaceUrl, entry.blurryScore.toFixed(1)));
+
                     logItem.appendChild(framesContainer);
                     this.dom.blurLogContainer.appendChild(logItem);
                 });
+            }
+
+            showImageInLightbox(dataUrl) {
+                this.dom.lightboxImage.src = dataUrl;
+                this.toggleModal('imageLightboxModal', true);
             }
         }
 
@@ -428,6 +455,14 @@
                 this.ui.dom.sessionSelect.addEventListener('change', (e) => this.handleSessionChange(e));
                 this.ui.dom.downloadLogButton.addEventListener('click', () => this.downloadSessionLog());
                 
+                // Lightbox
+                this.ui.dom.lightboxCloseButton.addEventListener('click', () => this.ui.toggleModal('imageLightboxModal', false));
+                this.ui.dom.imageLightboxModal.addEventListener('click', (e) => {
+                    if (e.target === this.ui.dom.imageLightboxModal) {
+                        this.ui.toggleModal('imageLightboxModal', false);
+                    }
+                });
+
                 // Misc
                 this.ui.dom.debugLogContainer.addEventListener('scroll', () => { this.userHasScrolledDebug = this.ui.dom.debugLogContainer.scrollTop > 0; });
                 this.ui.dom.confirmModalCancel.addEventListener('click', () => this.ui.toggleModal('customConfirmModal', false));
@@ -532,7 +567,7 @@
                 const processCtx = card.processCanvas.getContext('2d', { willReadFrequently: true });
                 let alertState = { active: false, lastAlertTime: 0 };
                 const analysisData = this.cameraAnalysisData.get(deviceId);
-                let lastClearFrame = { url: null, score: 0 };
+                let lastClearFrame = { fullFrameUrl: null, croppedFaceUrl: null, score: 0, detections: [] };
                 const frameCaptureCanvas = document.createElement('canvas');
 
                 const loop = () => {
@@ -588,17 +623,24 @@
                                 }
                             } else {
                                 alertState.active = false;
-                                if (!isScoreLow) lastClearFrame = { url: this.captureFrame(card.video, detections, frameCaptureCanvas), score: score };
+                                if (!isScoreLow) {
+                                    lastClearFrame = {
+                                        fullFrameUrl: this.captureFrame(card.video, detections, frameCaptureCanvas),
+                                        croppedFaceUrl: this.captureFrame(card.video, [mainFace], frameCaptureCanvas, mainFace, true),
+                                        score: score,
+                                        detections: detections
+                                    };
+                                }
                             }
-                            this.drawDetections(overlayCtx, detections, mainFace, isBlurry);
+                            this.drawDetections(overlayCtx, detections, mainFace, isBlurry, card.video);
                         } else {
                             card.scoreEl.textContent = '얼굴 미검출';
                             analysisData.lastPosition = null;
                         }
                         requestAnimationFrame(loop);
                     } catch (error) {
-                        this.addDebugLog("Analysis loop error", "ERROR", error);
-                        if (this.analysisLoops.has(deviceId)) requestAnimationFrame(loop);
+                        this.addDebugLog("Analysis loop error", "ERROR", {name: error.name, message: error.message});
+                        // Do not reschedule the loop on error to prevent error flood.
                     }
                 };
                 this.analysisLoops.set(deviceId, requestAnimationFrame(loop));
@@ -606,32 +648,42 @@
             
             captureAndLog(video, detections, mainFace, score, lastClearFrame, canvas) {
                 const blurryFrameDataUrl = this.captureFrame(video, detections, canvas, mainFace);
+                const croppedBlurryFaceUrl = this.captureFrame(video, [mainFace], canvas, mainFace, true);
                 this.saveBlurLog({
                     timestamp: new Date().toLocaleTimeString(),
-                    clearFrameUrl: lastClearFrame.url,
+                    clearFrameUrl: lastClearFrame.fullFrameUrl,
                     blurryFrameUrl: blurryFrameDataUrl,
+                    croppedClearFaceUrl: lastClearFrame.croppedFaceUrl,
+                    croppedBlurryFaceUrl: croppedBlurryFaceUrl,
                     clearScore: lastClearFrame.score,
                     blurryScore: score
                 });
             }
 
-            captureFrame(video, detections, canvas, mainFace = null) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+            captureFrame(video, detections, canvas, mainFace = null, cropToFace = false) {
+                const box = cropToFace && mainFace ? mainFace.boundingBox : { originX: 0, originY: 0, width: video.videoWidth, height: video.videoHeight };
+                canvas.width = box.width;
+                canvas.height = box.height;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0);
-                this.drawDetections(ctx, detections, mainFace, !!mainFace);
+                ctx.drawImage(video, box.originX, box.originY, box.width, box.height, 0, 0, box.width, box.height);
+                if (!cropToFace) {
+                    this.drawDetections(ctx, detections, mainFace, !!mainFace, video);
+                }
                 return canvas.toDataURL('image/jpeg', 0.8);
             }
 
-            drawDetections(ctx, detections, mainFace, isBlurry) {
+            drawDetections(ctx, detections, mainFace, isBlurry, video) {
                 detections.forEach(detection => {
                     const box = detection.boundingBox;
                     if (!box) return;
                     const isMain = detection === mainFace;
                     ctx.strokeStyle = isMain && isBlurry ? '#ef4444' : '#3b82f6';
                     ctx.lineWidth = isMain ? 4 : 2;
-                    ctx.strokeRect(box.originX, box.originY, box.width, box.height);
+                    
+                    const offsetX = (ctx.canvas.width !== video.videoWidth) ? -box.originX : 0;
+                    const offsetY = (ctx.canvas.height !== video.videoHeight) ? -box.originY : 0;
+
+                    ctx.strokeRect(box.originX + offsetX, box.originY + offsetY, box.width, box.height);
                 });
             }
 
@@ -841,4 +893,3 @@
     </script>
 </body>
 </html>
-
