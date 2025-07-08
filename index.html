@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.24 (흐림 감지 로직 수정)</title>
+    <title>실시간 포커스 모니터 Ver 2.26 (자동 재시작)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.24</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.26</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -527,9 +527,11 @@
             }
             
             async setupCamera(device, isPrimary) {
-                this.cameraAnalysisData.set(device.deviceId, { scores: [], average: 0, lastPosition: null });
+                this.cameraAnalysisData.set(device.deviceId, { scores: [], average: 0, lastPosition: null, wasScoreLow: false });
                 const card = this.ui.createCameraCard();
                 this.ui.dom.cameraGrid.appendChild(card.wrapper);
+                card.wrapper.dataset.device = JSON.stringify(device);
+                card.wrapper.dataset.isPrimary = isPrimary;
 
                 const constraints = { video: { deviceId: { exact: device.deviceId } } };
                 if (device.resolution !== 'default') {
@@ -548,7 +550,7 @@
                     card.video.onplaying = () => this.onMediaPlaying(card, device.deviceId, isPrimary);
                 } catch (err) {
                     this.addDebugLog(`Failed to get stream for ${device.deviceId}`, 'ERROR', err);
-                    card.wrapper.innerHTML = `<div class="w-full h-full bg-black rounded-md flex items-center justify-center p-4"><p class="text-yellow-400 text-center">카메라 열기 실패<br><span class="text-sm text-gray-400">${err.name}</span></p></div>`;
+                    this.handleAnalysisError(card, device.deviceId);
                 }
             }
 
@@ -614,8 +616,11 @@
                                 isScoreLow = score < parseFloat(this.ui.dom.thresholdInput.value);
                                 card.scoreEl.textContent = score.toFixed(1);
                             }
-                            const isBlurry = isScoreLow && isStationary;
-                            card.scoreEl.classList.toggle('text-red-500', isBlurry);
+                            
+                            const isBlurry = isScoreLow && !analysisData.wasScoreLow && isStationary;
+                            analysisData.wasScoreLow = isScoreLow; // Update state for next frame
+
+                            card.scoreEl.classList.toggle('text-red-500', isScoreLow);
                             
                             if (isBlurry) {
                                 if (!alertState.active && (performance.now() - alertState.lastAlertTime > 1000)) {
@@ -629,7 +634,6 @@
                                 alertState.active = false;
                             }
                             
-                            // Always update lastClearFrame with the current frame's data for the next iteration.
                             lastClearFrame = {
                                 fullFrameUrl: this.captureFrame(card.video, detections, frameCaptureCanvas, mainFace),
                                 croppedFaceUrl: this.captureFrame(card.video, [mainFace], frameCaptureCanvas, mainFace, true),
@@ -644,9 +648,25 @@
                         requestAnimationFrame(loop);
                     } catch (error) {
                         this.addDebugLog("Analysis loop error", "ERROR", error);
+                        this.handleAnalysisError(card, deviceId);
                     }
                 };
                 this.analysisLoops.set(deviceId, requestAnimationFrame(loop));
+            }
+
+            handleAnalysisError(card, deviceId) {
+                this.analysisLoops.delete(deviceId);
+                const errorOverlay = document.createElement('div');
+                errorOverlay.className = 'absolute inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center gap-2';
+                errorOverlay.innerHTML = `<p class="text-yellow-400 font-bold">분석 오류, 2초 후 재시작합니다...</p>`;
+                card.videoContainer.appendChild(errorOverlay);
+
+                setTimeout(() => {
+                    const device = JSON.parse(card.wrapper.dataset.device);
+                    const isPrimary = card.wrapper.dataset.isPrimary === 'true';
+                    card.wrapper.remove();
+                    this.setupCamera(device, isPrimary);
+                }, 2000);
             }
             
             captureAndLog(video, detections, mainFace, score, lastClearFrame, canvas) {
