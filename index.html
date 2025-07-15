@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.29 (UI 개선)</title>
+    <title>실시간 포커스 모니터 Ver 2.31 (오류 수정)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/idb@7/build/umd.js"></script>
     <style>
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #111827; color: #f3f4f6; }
-        .camera-card { background-color: #1f2937; border: 2px solid #374151; transition: border-color 0.3s ease-in-out, max-width 0.3s ease-in-out, max-height 0.3s ease-in-out; }
+        .camera-card { background-color: #1f2937; border: 2px solid #374151; }
         .camera-card.alert { border-color: #ef4444; animation: pulse-red 1s infinite; }
         @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } }
         .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.29</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.31</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -82,46 +82,35 @@
              <button id="main-action-button" class="bg-blue-600 text-white font-bold py-3 px-8 text-lg rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed">모니터링 시작</button>
         </div>
         
-        <div id="camera-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div id="main-content" class="lg:col-span-2">
+                <div id="camera-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            </div>
+            <div id="debug-panel" class="bg-gray-900 text-gray-400 p-4 rounded-lg hidden">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-white font-bold text-lg">상세 분석 로그</h3>
+                    <button id="clear-debug-log-button" class="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500">로그 지우기</button>
+                </div>
+                <div id="debug-log-container" class="font-mono text-xs space-y-2 max-h-[60vh] lg:max-h-full overflow-y-auto bg-black p-2 rounded-md">
+                </div>
+            </div>
+        </div>
 
         <div id="blur-log-panel" class="mt-8 bg-gray-800 p-4 rounded-xl shadow-lg hidden">
             <div class="flex justify-between items-center mb-4">
                 <h3 id="blur-log-title" class="text-white font-bold text-lg">흐림 감지 로그</h3>
                 <button id="clear-log-button" class="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700">현재 세션 모두 지우기</button>
             </div>
-            <div id="blur-log-container" class="space-y-6 max-h-[80vh] overflow-y-auto pr-2">
-            </div>
-        </div>
-
-        <div id="debug-panel" class="mt-8 bg-gray-900 text-gray-400 p-4 rounded-lg hidden">
-            <div class="flex justify-between items-center mb-2">
-                <h3 class="text-white font-bold text-lg">상세 분석 로그</h3>
-                <button id="clear-debug-log-button" class="px-3 py-1 bg-gray-600 text-white text-sm rounded-md hover:bg-gray-500">로그 지우기</button>
-            </div>
-            <div id="debug-log-container" class="font-mono text-xs space-y-2 max-h-60 overflow-y-auto bg-black p-2 rounded-md">
+            <div id="blur-log-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             </div>
         </div>
     </div>
     
     <div id="camera-select-modal" class="custom-modal-backdrop">
         <div class="custom-modal-content">
-            <h3 class="text-lg font-bold mb-4 text-white">모니터링 설정</h3>
-            <div class="control-group space-y-3 mb-6">
-                <p class="font-bold text-white">1. 출력 크기 선택</p>
-                <div id="modal-output-size-controls" class="flex flex-wrap gap-x-4 gap-y-2">
-                    <div class="flex items-center"><input type="radio" id="size-auto" name="output-size" value="auto" class="h-4 w-4" checked><label for="size-auto" class="ml-2">자동</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-480" name="output-size" value="480" class="h-4 w-4"><label for="size-480" class="ml-2">480p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-720" name="output-size" value="720" class="h-4 w-4"><label for="size-720" class="ml-2">720p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-1080" name="output-size" value="1080" class="h-4 w-4"><label for="size-1080" class="ml-2">1080p</label></div>
-                    <div class="flex items-center"><input type="radio" id="size-custom" name="output-size" value="custom" class="h-4 w-4"><label for="size-custom" class="ml-2">너비 지정:</label></div>
-                </div>
-                <input type="number" id="custom-size-input" placeholder="최대 너비(px)" class="w-full p-2 bg-gray-700 rounded-md border-gray-600" disabled>
-            </div>
-            <div class="control-group space-y-3">
-                <p class="font-bold text-white">2. 카메라 및 해상도 선택</p>
-                <div id="camera-list" class="space-y-2 max-h-48 overflow-y-auto pr-2"></div>
-            </div>
-            <div class="flex justify-end gap-4 mt-6">
+            <h3 class="text-lg font-bold mb-4 text-white">카메라 및 해상도 선택</h3>
+            <div id="camera-list" class="space-y-2 max-h-64 overflow-y-auto pr-2 mb-6"></div>
+            <div class="flex justify-end gap-4">
                 <button id="modal-cancel-button" class="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500">취소</button>
                 <button id="modal-start-button" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">선택 완료</button>
             </div>
@@ -218,7 +207,7 @@
                     'main-action-button', 'status-container', 'status-text', 'loading-spinner',
                     'camera-grid', 'auto-threshold-checkbox', 'manual-threshold-group',
                     'auto-threshold-group', 'threshold-slider', 'threshold-input',
-                    'sensitivity-slider', 'sensitivity-input', 'custom-size-input',
+                    'sensitivity-slider', 'sensitivity-input',
                     'session-select', 'clear-all-logs-button', 'mute-checkbox',
                     'debug-mode-checkbox', 'camera-select-modal', 'camera-list',
                     'modal-cancel-button', 'modal-start-button', 'blur-log-panel',
@@ -226,14 +215,12 @@
                     'debug-log-container', 'clear-debug-log-button', 'custom-confirm-modal',
                     'confirm-modal-title', 'confirm-modal-body', 'confirm-modal-cancel', 'confirm-modal-ok',
                     'history-control-group', 'download-log-button',
-                    'image-lightbox-modal', 'lightbox-close-button', 'lightbox-image',
-                    'modal-output-size-controls'
+                    'image-lightbox-modal', 'lightbox-close-button', 'lightbox-image'
                 ];
                 ids.forEach(id => {
                     const camelCaseId = id.replace(/-(\w)/g, (_, c) => c.toUpperCase());
                     this.dom[camelCaseId] = document.getElementById(id);
                 });
-                this.dom.sizeRadios = document.querySelectorAll('input[name="output-size"]');
             }
 
             updateStatus(message, type) {
@@ -317,10 +304,10 @@
                 card.wrapper = document.createElement('div');
                 card.wrapper.className = 'camera-card rounded-lg p-4 flex flex-col gap-2';
                 card.videoContainer = document.createElement('div');
-                card.videoContainer.className = 'relative w-full';
+                card.videoContainer.className = 'relative w-full aspect-video'; // Enforce 16:9
                 card.video = document.createElement('video');
                 card.video.autoplay = true; card.video.muted = true; card.video.playsInline = true;
-                card.video.className = 'w-full h-full rounded-md bg-black';
+                card.video.className = 'w-full h-full rounded-md bg-black object-contain';
                 card.overlayCanvas = document.createElement('canvas');
                 card.overlayCanvas.className = 'overlay-canvas';
                 const infoDiv = document.createElement('div');
@@ -332,14 +319,12 @@
                 card.scoreEl.className = 'absolute bottom-2 left-1/2 -translate-x-1/2 font-bold text-2xl text-white bg-black bg-opacity-50 px-2 rounded';
                 card.processCanvas = document.createElement('canvas');
                 card.processCanvas.className = 'hidden';
-
                 const actionsDiv = document.createElement('div');
                 actionsDiv.className = 'flex justify-center mt-2';
                 card.captureButton = document.createElement('button');
                 card.captureButton.className = 'manual-capture-button bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded text-sm font-semibold';
                 card.captureButton.textContent = '현재 장면 추출';
                 actionsDiv.appendChild(card.captureButton);
-
                 card.videoContainer.append(card.video, card.overlayCanvas, infoDiv, card.scoreEl);
                 card.wrapper.append(card.videoContainer, actionsDiv, card.processCanvas);
                 return card;
@@ -480,12 +465,6 @@
                 
                 const settingsToSave = ['thresholdSlider', 'thresholdInput', 'sensitivitySlider', 'sensitivityInput', 'autoThresholdCheckbox', 'muteCheckbox', 'debugModeCheckbox'];
                 settingsToSave.forEach(id => this.ui.dom[id].addEventListener('change', () => this.saveSettings()));
-                
-                this.ui.dom.modalOutputSizeControls.addEventListener('change', (e) => {
-                    if (e.target.name === 'output-size') {
-                        this.ui.dom.customSizeInput.disabled = e.target.value !== 'custom';
-                    }
-                });
 
                 this.ui.dom.clearLogButton.addEventListener('click', () => this.clearCurrentSessionLogs());
                 this.ui.dom.clearDebugLogButton.addEventListener('click', () => this.clearDebugLogs());
@@ -548,7 +527,6 @@
                 this.ui.dom.debugPanel.classList.toggle('hidden', !this.ui.dom.debugModeCheckbox.checked);
                 this.ui.dom.cameraGrid.innerHTML = '';
                 devicesToMonitor.forEach((device, index) => this.setupCamera(device, index === 0));
-                this.applyOutputSize();
             }
             
             async setupCamera(device, isPrimary) {
@@ -810,26 +788,6 @@
                 this.ui.dom.muteCheckbox.checked = settings.mute ?? false;
                 this.ui.dom.debugModeCheckbox.checked = settings.debug ?? true;
                 this.ui.dom.debugPanel.classList.toggle('hidden', !this.ui.dom.debugModeCheckbox.checked);
-            }
-
-            applyOutputSize() {
-                const selectedSize = this.ui.dom.modalOutputSizeControls.querySelector('input:checked').value;
-                const customSize = this.ui.dom.customSizeInput.value;
-                this.addDebugLog(`Applying output size. Selected: ${selectedSize}, Custom: ${customSize || 'N/A'}`);
-                
-                const sizeMap = { '480': '480px', '720': '720px', '1080': '1080px' };
-                const maxHeight = sizeMap[selectedSize] || 'none';
-                const maxWidth = selectedSize === 'custom' ? (customSize ? `${customSize}px` : 'none') : 'none';
-                this.addDebugLog(`Calculated styles - maxWidth: ${maxWidth}, maxHeight: ${maxHeight}`);
-
-                document.querySelectorAll('.camera-card').forEach(card => {
-                    card.style.maxWidth = maxWidth;
-                    const videoContainer = card.querySelector('.relative');
-                    if (videoContainer) {
-                        videoContainer.style.maxHeight = maxHeight;
-                    }
-                });
-                this.addDebugLog(`Output size styles applied.`);
             }
 
             async createSession() {
