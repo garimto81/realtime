@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 포커스 모니터 Ver 2.31 (오류 수정)</title>
+    <title>실시간 포커스 모니터 Ver 2.32 (오류 수정)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -28,7 +28,7 @@
     <div class="container mx-auto max-w-[1920px] p-4 md:p-8">
         <header class="text-center mb-8">
             <h1 class="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.31</span>
+                실시간 포커스 모니터 <span id="version-title" class="text-base align-middle text-gray-400">Ver 2.32</span>
             </h1>
             <p id="status-container" class="text-lg text-yellow-400 mt-2 flex items-center justify-center gap-2">
                 <svg id="loading-spinner" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -463,7 +463,12 @@
                 this.ui.dom.modalCancelButton.addEventListener('click', () => this.ui.toggleModal('cameraSelectModal', false));
                 this.ui.dom.modalStartButton.addEventListener('click', () => this.startSelectedMonitoring());
                 
-                const settingsToSave = ['thresholdSlider', 'thresholdInput', 'sensitivitySlider', 'sensitivityInput', 'autoThresholdCheckbox', 'muteCheckbox', 'debugModeCheckbox'];
+                this.ui.dom.thresholdSlider.addEventListener('input', (e) => { this.ui.dom.thresholdInput.value = e.target.value; this.saveSettings(); });
+                this.ui.dom.thresholdInput.addEventListener('input', (e) => { this.ui.dom.thresholdSlider.value = e.target.value; this.saveSettings(); });
+                this.ui.dom.sensitivitySlider.addEventListener('input', (e) => { this.ui.dom.sensitivityInput.value = e.target.value; this.saveSettings(); });
+                this.ui.dom.sensitivityInput.addEventListener('input', (e) => { this.ui.dom.sensitivitySlider.value = e.target.value; this.saveSettings(); });
+
+                const settingsToSave = ['autoThresholdCheckbox', 'muteCheckbox', 'debugModeCheckbox'];
                 settingsToSave.forEach(id => this.ui.dom[id].addEventListener('change', () => this.saveSettings()));
 
                 this.ui.dom.clearLogButton.addEventListener('click', () => this.clearCurrentSessionLogs());
